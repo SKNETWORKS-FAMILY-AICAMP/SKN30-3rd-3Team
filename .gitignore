@@ -1,0 +1,68 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+.next/
+.turbo/
+out/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Logs and local runtime
+*.log
+logs/
+tmp/
+temp/
+
+# Data and model artifacts
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/README.md
+data/external/*
+!data/external/.gitkeep
+!data/external/README.md
+data/interim/*
+!data/interim/.gitkeep
+!data/interim/README.md
+data/processed/*
+!data/processed/.gitkeep
+!data/processed/README.md
+data/vectorstore/*
+!data/vectorstore/.gitkeep
+!data/vectorstore/README.md
+uploads/
+artifacts/
+models/
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json

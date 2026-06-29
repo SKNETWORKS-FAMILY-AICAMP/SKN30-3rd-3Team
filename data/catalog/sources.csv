@@ -1,0 +1,12 @@
+source_id,title,publisher,url,license,category,priority,owner,status,notes
+nongsaro_indoor_water,농사로 실내식물 물관리,농촌진흥청/농사로,,확인 필요,indoor_care,1,data-team,todo,물주기/배수/과습/건조 판단 기준
+nihhs_indoor_garden,국립원예특작과학원 실내정원 유지관리 자료,국립원예특작과학원,,확인 필요,indoor_care,1,data-team,todo,흙 표면 수분 확인/광관리/실내정원 관리 기준
+rda_crop_tech,농촌진흥청 작목별 농업기술정보,농촌진흥청,,확인 필요,crop_tech,1,data-team,todo,작물별 재배 단계/관리법/병해충 예방
+weekly_farming_info,주간농사정보 OpenAPI,농촌진흥청,,확인 필요,weekly_farming,2,data-team,todo,시기별 농작물 관리와 병해충 방제요령
+urban_pest_control,도시농업 병해충 관리 자료,농사로/농촌진흥청,,확인 필요,pest_reference,2,data-team,todo,실내/도시농업 식물 해충 초기 대응
+aihub_facility_crop_disease,AI Hub 시설 작물 질병 진단 이미지,AI Hub,,확인 필요,image_reference,3,data-team,todo,시연용 정상/이상 이미지 참고
+aihub_openfield_crop_disease,AI Hub 노지 작물 질병 진단 이미지,AI Hub,,확인 필요,image_reference,3,data-team,todo,bounding box annotation 포함 여부 확인
+pest_forecast_api,병해충 예찰정보 API,농촌진흥청,,확인 필요,pest_forecast,4,data-team,todo,2차 확장 또는 주의 정보로 제한
+pesticide_safety_api,농약안전사용지침 API,농촌진흥청,,확인 필요,pesticide_safety,4,data-team,todo,농약 추천이 아닌 안전사용 확인 용도
+agri_weather,농업기상 데이터,기상/농업 관련 기관,,확인 필요,weather,5,data-team,todo,2차 기상 기반 위험도 분석
+smartfarm_best_farms,스마트팜 우수농가 공개용 데이터,농촌진흥청,,확인 필요,smartfarm,5,data-team,todo,2차 스마트팜 환경 비교
