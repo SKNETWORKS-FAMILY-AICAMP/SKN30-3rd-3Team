@@ -1,10 +1,10 @@
 # Frontend
 
-식물 주치의 AI의 사용자 화면 영역입니다. 팀장이 AI로 만든 UI 파일을 제공하면 이 폴더에서 실제 앱 구조에 맞게 통합합니다.
+식물 주치의 AI의 사용자 화면 영역입니다. `frontend/design/`의 HTML 시안을 최대한 그대로 유지하기 위해 Vite + React 앱에서 원본 HTML을 직접 렌더링합니다.
 
 ## 권장 스택
 
-- Next.js 또는 React + TypeScript
+- Vite + React + TypeScript
 - Supabase Auth client
 - API client는 `contracts/api/openapi.yaml` 기준으로 생성 또는 수동 정의
 - 배포: Vercel 추천
@@ -33,6 +33,27 @@
 - 로그인/로그아웃은 Supabase Auth를 사용합니다.
 - Backend API 요청에는 Supabase access token을 Bearer token으로 전달합니다.
 - 로그인하지 않은 사용자는 식물 등록, 사진 업로드, AI 상담 화면에 접근하지 못하게 합니다.
+
+## 로컬 실행
+
+```bash
+npm install
+npm run dev
+```
+
+기본 개발 서버는 `http://127.0.0.1:3000/`입니다.
+
+## 환경변수
+
+`.env.local`에 아래 값을 설정합니다.
+
+```bash
+VITE_BACKEND_URL=http://localhost:8000
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+```
+
+현재 화면은 디자인 시안 보존을 우선해 `frontend/design/*.html`을 그대로 표시합니다. Backend 연동 단계에서는 원본 시안을 기준으로 필요한 화면부터 React 컴포넌트화합니다.
 
 ## 배포
 
