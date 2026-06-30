@@ -1,93 +1,181 @@
 import uuid
 from datetime import datetime, date, timezone
 from typing import List
-from fastapi import APIRouter, Path, status, Depends
+from fastapi import APIRouter, Path, status, Depends, HTTPException
 from app.schemas.plant import Plant, PlantCreate, PlantPhoto, PlantPhotoCreate
 from app.schemas.care_log import CareLog, CareLogCreate
 from app.auth.security import get_current_user
+from app.db.session import get_supabase_client
+from supabase import Client
 
 router = APIRouter(prefix="/plants", tags=["Plants"])
 
-# Mock 데이터 저장소 역할 (간단한 메모리 리스트)
-MOCK_PLANTS = [
-    Plant(
-        id=uuid.UUID("d3b07384-d113-49c3-a558-1ec114a84d41"),
-        name="몬스테라",
-        species="Monstera deliciosa",
-        location="거실 창가",
-        sunlight="간접광",
-        createdAt=datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
-    ),
-    Plant(
-        id=uuid.UUID("e4c18495-e224-5aa4-b669-2fd225b95e52"),
-        name="상추 텃밭",
-        species="Lactuca sativa",
-        location="베란다 화분",
-        sunlight="오전 직사광선",
-        createdAt=datetime(2026, 6, 10, 9, 30, 0, tzinfo=timezone.utc)
-    )
-]
-
 @router.get("", response_model=List[Plant], summary="사용자의 식물 목록 조회")
-async def list_plants(current_user_id: uuid.UUID = Depends(get_current_user)):
+async def list_plants(
+    current_user_id: uuid.UUID = Depends(get_current_user),
+    db: Client = Depends(get_supabase_client)
+):
     """
-    현재 로그인한 사용자의 모든 식물 프로필 목록을 반환합니다. (인증 및 Mock 데이터)
+    현재 로그인한 사용자의 모든 식물 프로필 목록을 데이터베이스에서 조회하여 반환합니다.
     """
-    return MOCK_PLANTS
+    try:
+        response = db.table("plants").select("*").eq("user_id", str(current_user_id)).execute()
+        
+        plants = []
+        for item in response.data:
+            plants.append(Plant(
+                id=uuid.UUID(item["id"]),
+                name=item["name"],
+                species=item.get("species"),
+                location=item.get("location"),
+                sunlight=item.get("sunlight"),
+                createdAt=datetime.fromisoformat(item["created_at"])
+            ))
+        return plants
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"식물 목록 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
 @router.post("", response_model=Plant, status_code=status.HTTP_201_CREATED, summary="식물 프로필 신규 등록")
 async def create_plant(
     plant_in: PlantCreate,
-    current_user_id: uuid.UUID = Depends(get_current_user)
+    current_user_id: uuid.UUID = Depends(get_current_user),
+    db: Client = Depends(get_supabase_client)
 ):
     """
-    새로운 식물 프로필을 등록합니다. (인증 및 Mock 데이터)
+    새로운 식물 프로필을 데이터베이스에 등록합니다.
     """
-    new_plant = Plant(
-        id=uuid.uuid4(),
-        name=plant_in.name,
-        species=plant_in.species,
-        location=plant_in.location,
-        sunlight=plant_in.sunlight,
-        createdAt=datetime.now(timezone.utc)
-    )
-    # Mock 리스트에 임시 저장
-    MOCK_PLANTS.append(new_plant)
-    return new_plant
+    try:
+        insert_data = {
+            "user_id": str(current_user_id),
+            "name": plant_in.name,
+            "species": plant_in.species,
+            "location": plant_in.location,
+            "sunlight": plant_in.sunlight
+        }
+        response = db.table("plants").insert(insert_data).execute()
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="식물 등록에 실패했습니다."
+            )
+        
+        item = response.data[0]
+        return Plant(
+            id=uuid.UUID(item["id"]),
+            name=item["name"],
+            species=item.get("species"),
+            location=item.get("location"),
+            sunlight=item.get("sunlight"),
+            createdAt=datetime.fromisoformat(item["created_at"])
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"식물 등록 중 오류가 발생했습니다: {str(e)}"
+        )
 
 @router.post("/{plantId}/care-logs", response_model=CareLog, status_code=status.HTTP_201_CREATED, summary="식물 재배/물주기 로그 등록")
 async def create_care_log(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     log_in: CareLogCreate = ...,
-    current_user_id: uuid.UUID = Depends(get_current_user)
+    current_user_id: uuid.UUID = Depends(get_current_user),
+    db: Client = Depends(get_supabase_client)
 ):
     """
-    특정 식물에 대한 물주기, 상태 점검 및 메모를 포함한 재배 일지 로그를 등록합니다. (인증 및 Mock 데이터)
+    특정 식물에 대한 물주기, 상태 점검 및 메모를 포함한 재배 일지 로그를 등록합니다.
     """
-    return CareLog(
-        id=uuid.uuid4(),
-        plantId=plantId,
-        wateredAt=log_in.wateredAt or date.today(),
-        leafCondition=log_in.leafCondition or "건강함",
-        soilCondition=log_in.soilCondition or "적당히 촉촉함",
-        memo=log_in.memo or "로그 없음",
-        createdAt=datetime.now(timezone.utc)
-    )
+    try:
+        # 식물이 존재하고 현재 사용자가 소유하고 있는지 확인
+        plant_check = db.table("plants").select("id").eq("id", str(plantId)).eq("user_id", str(current_user_id)).execute()
+        if not plant_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="식물을 찾을 수 없거나 해당 식물에 대한 권한이 없습니다."
+            )
+            
+        insert_data = {
+            "plant_id": str(plantId),
+            "watered_at": log_in.wateredAt.isoformat() if log_in.wateredAt else None,
+            "leaf_condition": log_in.leafCondition,
+            "soil_condition": log_in.soilCondition,
+            "memo": log_in.memo
+        }
+        
+        response = db.table("care_logs").insert(insert_data).execute()
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="재배 로그 등록에 실패했습니다."
+            )
+            
+        item = response.data[0]
+        return CareLog(
+            id=uuid.UUID(item["id"]),
+            plantId=uuid.UUID(item["plant_id"]),
+            wateredAt=date.fromisoformat(item["watered_at"]) if item.get("watered_at") else None,
+            leafCondition=item.get("leaf_condition"),
+            soilCondition=item.get("soil_condition"),
+            memo=item.get("memo"),
+            createdAt=datetime.fromisoformat(item["created_at"])
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"재배 로그 등록 중 오류가 발생했습니다: {str(e)}"
+        )
 
 @router.post("/{plantId}/photos", response_model=PlantPhoto, status_code=status.HTTP_201_CREATED, summary="식물 사진 메타데이터 등록")
 async def create_plant_photo(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     photo_in: PlantPhotoCreate = ...,
-    current_user_id: uuid.UUID = Depends(get_current_user)
+    current_user_id: uuid.UUID = Depends(get_current_user),
+    db: Client = Depends(get_supabase_client)
 ):
     """
-    Supabase Storage 등에 업로드 완료된 식물 사진의 경로 및 메타데이터를 백엔드에 등록합니다. (인증 및 Mock 데이터)
+    Supabase Storage 등에 업로드 완료된 식물 사진의 경로 및 메타데이터를 백엔드에 등록합니다.
     """
-    return PlantPhoto(
-        id=uuid.uuid4(),
-        plantId=plantId,
-        storagePath=photo_in.storagePath,
-        capturedAt=photo_in.capturedAt or datetime.now(timezone.utc),
-        note=photo_in.note or "사진 메모 없음",
-        createdAt=datetime.now(timezone.utc)
-    )
+    try:
+        # 식물이 존재하고 현재 사용자가 소유하고 있는지 확인
+        plant_check = db.table("plants").select("id").eq("id", str(plantId)).eq("user_id", str(current_user_id)).execute()
+        if not plant_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="식물을 찾을 수 없거나 해당 식물에 대한 권한이 없습니다."
+            )
+            
+        insert_data = {
+            "plant_id": str(plantId),
+            "storage_path": photo_in.storagePath,
+            "note": photo_in.note,
+            "captured_at": photo_in.capturedAt.isoformat() if photo_in.capturedAt else datetime.now(timezone.utc).isoformat()
+        }
+        
+        response = db.table("plant_photos").insert(insert_data).execute()
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="식물 사진 메타데이터 등록에 실패했습니다."
+            )
+            
+        item = response.data[0]
+        return PlantPhoto(
+            id=uuid.UUID(item["id"]),
+            plantId=uuid.UUID(item["plant_id"]),
+            storagePath=item["storage_path"],
+            capturedAt=datetime.fromisoformat(item["captured_at"]),
+            note=item.get("note"),
+            createdAt=datetime.fromisoformat(item["created_at"])
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"식물 사진 등록 중 오류가 발생했습니다: {str(e)}"
+        )
+

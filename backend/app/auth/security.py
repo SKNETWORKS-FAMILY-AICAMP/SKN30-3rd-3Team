@@ -1,11 +1,8 @@
 import uuid
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.db.session import supabase
+from fastapi.security import HTTPAuthorizationCredentials
+from app.db.session import supabase, reusable_oauth2
 
-# FastAPI의 기본 HTTP Bearer 인증 체계를 가져옵니다.
-# Swagger UI에 자물쇠 버튼이 생기고 'Authorization: Bearer <JWT>' 헤더를 파싱해 줍니다.
-reusable_oauth2 = HTTPBearer()
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(reusable_oauth2)

@@ -1,6 +1,101 @@
 import pytest
+import uuid
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from app.main import app
+from app.auth.security import get_current_user
+from app.db.session import get_supabase_client
+
+# 테스트용 고정 사용자 UUID
+TEST_USER_ID = uuid.UUID("d3b07384-d113-49c3-a558-1ec114a84d41")
+
+# Mock Supabase API 응답 클래스
+class MockAPIResponse:
+    def __init__(self, data):
+        self.data = data
+
+# Mock Supabase 테이블 조회/삽입 헬퍼 클래스
+class MockSupabaseTable:
+    def __init__(self, name):
+        self.name = name
+        self.queries = []
+
+    def select(self, *args, **kwargs):
+        self.queries.append(("select", args, kwargs))
+        return self
+
+    def eq(self, field, value):
+        self.queries.append(("eq", field, value))
+        return self
+
+    def insert(self, data):
+        self.queries.append(("insert", data))
+        return self
+
+    def execute(self):
+        data = []
+        if self.name == "plants":
+            if any(q[0] == "select" for q in self.queries):
+                data = [
+                    {
+                        "id": "d3b07384-d113-49c3-a558-1ec114a84d41",
+                        "user_id": str(TEST_USER_ID),
+                        "name": "몬스테라",
+                        "species": "Monstera deliciosa",
+                        "location": "거실 창가",
+                        "sunlight": "간접광",
+                        "created_at": "2026-06-01T12:00:00+00:00"
+                    }
+                ]
+            elif any(q[0] == "insert" for q in self.queries):
+                insert_val = next(q[1] for q in self.queries if q[0] == "insert")
+                data = [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "user_id": str(TEST_USER_ID),
+                        "name": insert_val["name"],
+                        "species": insert_val.get("species"),
+                        "location": insert_val.get("location"),
+                        "sunlight": insert_val.get("sunlight"),
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                ]
+        elif self.name == "care_logs":
+            if any(q[0] == "insert" for q in self.queries):
+                insert_val = next(q[1] for q in self.queries if q[0] == "insert")
+                data = [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "plant_id": insert_val["plant_id"],
+                        "watered_at": insert_val.get("watered_at"),
+                        "leaf_condition": insert_val.get("leaf_condition"),
+                        "soil_condition": insert_val.get("soil_condition"),
+                        "memo": insert_val.get("memo"),
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                ]
+        elif self.name == "plant_photos":
+            if any(q[0] == "insert" for q in self.queries):
+                insert_val = next(q[1] for q in self.queries if q[0] == "insert")
+                data = [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "plant_id": insert_val["plant_id"],
+                        "storage_path": insert_val["storage_path"],
+                        "note": insert_val.get("note"),
+                        "captured_at": insert_val.get("captured_at"),
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                ]
+        return MockAPIResponse(data)
+
+class MockSupabaseClient:
+    def table(self, name):
+        return MockSupabaseTable(name)
+
+# FastAPI 의존성 주입 오버라이드
+app.dependency_overrides[get_current_user] = lambda: TEST_USER_ID
+app.dependency_overrides[get_supabase_client] = lambda: MockSupabaseClient()
 
 client = TestClient(app)
 
@@ -71,3 +166,4 @@ def test_consult_plant_care():
     assert "todayActions" in data
     assert len(data["citations"]) > 0
     assert "safetyNotice" in data
+
