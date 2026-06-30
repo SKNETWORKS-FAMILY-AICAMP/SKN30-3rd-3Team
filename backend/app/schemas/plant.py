@@ -9,10 +9,18 @@ class PlantCreate(BaseModel):
     species: Optional[str] = Field(None, description="식물의 종류")
     location: Optional[str] = Field(None, json_schema_extra={"example": "베란다"}, description="식물이 위치한 공간")
     sunlight: Optional[str] = Field(None, json_schema_extra={"example": "오전 직사광선"}, description="식물이 받는 햇빛의 종류/양")
+    imageUrl: Optional[str] = Field(None, description="식물 대표 이미지 URL")
 
 class Plant(PlantCreate):
     id: UUID
     createdAt: datetime
+
+class PlantUpdate(BaseModel):
+    name: Optional[str] = Field(None, description="식물의 새 별명")
+    species: Optional[str] = Field(None, description="식물의 새 품종명")
+    location: Optional[str] = Field(None, description="식물의 새 위치")
+    sunlight: Optional[str] = Field(None, description="식물의 새 햇빛 환경")
+    imageUrl: Optional[str] = Field(None, description="식물의 새 대표 이미지 URL")
 
 class PlantPhotoCreate(BaseModel):
     storagePath: str = Field(..., description="Supabase Storage나 R2에 저장된 파일 경로")

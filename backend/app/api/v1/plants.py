@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime, date, timezone
 from typing import List
 from fastapi import APIRouter, Path, status, Depends, HTTPException
-from app.schemas.plant import Plant, PlantCreate, PlantPhoto, PlantPhotoCreate, PlantDetail
-from app.schemas.care_log import CareLog, CareLogCreate
+from app.schemas.plant import Plant, PlantCreate, PlantPhoto, PlantPhotoCreate, PlantDetail, PlantUpdate
+from app.schemas.care_log import CareLog, CareLogCreate, CareLogUpdate
 from app.auth.security import get_current_user
 from app.db.session import get_supabase_client
 from supabase import Client
@@ -29,6 +29,7 @@ async def list_plants(
                 species=item.get("species"),
                 location=item.get("location"),
                 sunlight=item.get("sunlight"),
+                imageUrl=item.get("image_url"),
                 createdAt=datetime.fromisoformat(item["created_at"])
             ))
         return plants
@@ -53,7 +54,8 @@ async def create_plant(
             "name": plant_in.name,
             "species": plant_in.species,
             "location": plant_in.location,
-            "sunlight": plant_in.sunlight
+            "sunlight": plant_in.sunlight,
+            "image_url": plant_in.imageUrl
         }
         response = db.table("plants").insert(insert_data).execute()
         if not response.data:
@@ -69,6 +71,7 @@ async def create_plant(
             species=item.get("species"),
             location=item.get("location"),
             sunlight=item.get("sunlight"),
+            imageUrl=item.get("image_url"),
             createdAt=datetime.fromisoformat(item["created_at"])
         )
     except Exception as e:
@@ -229,6 +232,7 @@ async def get_plant_detail(
             species=plant_data.get("species"),
             location=plant_data.get("location"),
             sunlight=plant_data.get("sunlight"),
+            imageUrl=plant_data.get("image_url"),
             createdAt=datetime.fromisoformat(plant_data["created_at"]),
             careLogs=care_logs,
             photos=photos
@@ -266,5 +270,142 @@ async def delete_plant(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"식물 삭제 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.patch("/{plantId}", response_model=Plant, summary="식물 프로필 수정")
+async def update_plant(
+    plantId: uuid.UUID = Path(..., description="식물 UUID"),
+    plant_in: PlantUpdate = ...,
+    current_user_id: uuid.UUID = Depends(get_current_user),
+    db: Client = Depends(get_supabase_client)
+):
+    try:
+        plant_check = db.table("plants").select("id").eq("id", str(plantId)).eq("user_id", str(current_user_id)).execute()
+        if not plant_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="식물을 찾을 수 없거나 해당 식물에 대한 권한이 없습니다."
+            )
+            
+        update_data = {}
+        if plant_in.name is not None:
+            update_data["name"] = plant_in.name
+        if plant_in.species is not None:
+            update_data["species"] = plant_in.species
+        if plant_in.location is not None:
+            update_data["location"] = plant_in.location
+        if plant_in.sunlight is not None:
+            update_data["sunlight"] = plant_in.sunlight
+        if plant_in.imageUrl is not None:
+            update_data["image_url"] = plant_in.imageUrl
+            
+        if not update_data:
+            plant_res = db.table("plants").select("*").eq("id", str(plantId)).execute()
+            item = plant_res.data[0]
+        else:
+            response = db.table("plants").update(update_data).eq("id", str(plantId)).execute()
+            item = response.data[0]
+            
+        return Plant(
+            id=uuid.UUID(item["id"]),
+            name=item["name"],
+            species=item.get("species"),
+            location=item.get("location"),
+            sunlight=item.get("sunlight"),
+            imageUrl=item.get("image_url"),
+            createdAt=datetime.fromisoformat(item["created_at"])
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"식물 프로필 수정 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.put("/{plantId}/care-logs/{logId}", response_model=CareLog, summary="재배 로그 수정")
+async def update_care_log(
+    plantId: uuid.UUID = Path(..., description="식물 UUID"),
+    logId: uuid.UUID = Path(..., description="로그 UUID"),
+    log_in: CareLogUpdate = ...,
+    current_user_id: uuid.UUID = Depends(get_current_user),
+    db: Client = Depends(get_supabase_client)
+):
+    try:
+        plant_check = db.table("plants").select("id").eq("id", str(plantId)).eq("user_id", str(current_user_id)).execute()
+        if not plant_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="식물을 찾을 수 없거나 해당 식물에 대한 권한이 없습니다."
+            )
+        log_check = db.table("care_logs").select("id").eq("id", str(logId)).eq("plant_id", str(plantId)).execute()
+        if not log_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="해당 식물의 재배 로그를 찾을 수 없습니다."
+            )
+            
+        update_data = {}
+        if log_in.wateredAt is not None:
+            update_data["watered_at"] = log_in.wateredAt.isoformat()
+        if log_in.leafCondition is not None:
+            update_data["leaf_condition"] = log_in.leafCondition
+        if log_in.soilCondition is not None:
+            update_data["soil_condition"] = log_in.soilCondition
+        if log_in.memo is not None:
+            update_data["memo"] = log_in.memo
+            
+        if not update_data:
+            item = log_check.data[0]
+        else:
+            response = db.table("care_logs").update(update_data).eq("id", str(logId)).execute()
+            item = response.data[0]
+            
+        return CareLog(
+            id=uuid.UUID(item["id"]),
+            plantId=uuid.UUID(item["plant_id"]),
+            wateredAt=date.fromisoformat(item["watered_at"]) if item.get("watered_at") else None,
+            leafCondition=item.get("leaf_condition"),
+            soilCondition=item.get("soil_condition"),
+            memo=item.get("memo"),
+            createdAt=datetime.fromisoformat(item["created_at"])
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"재배 로그 수정 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.delete("/{plantId}/care-logs/{logId}", status_code=status.HTTP_204_NO_CONTENT, summary="재배 로그 삭제")
+async def delete_care_log(
+    plantId: uuid.UUID = Path(..., description="식물 UUID"),
+    logId: uuid.UUID = Path(..., description="로그 UUID"),
+    current_user_id: uuid.UUID = Depends(get_current_user),
+    db: Client = Depends(get_supabase_client)
+):
+    try:
+        plant_check = db.table("plants").select("id").eq("id", str(plantId)).eq("user_id", str(current_user_id)).execute()
+        if not plant_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="식물을 찾을 수 없거나 해당 식물에 대한 권한이 없습니다."
+            )
+        log_check = db.table("care_logs").select("id").eq("id", str(logId)).eq("plant_id", str(plantId)).execute()
+        if not log_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="해당 식물의 재배 로그를 찾을 수 없습니다."
+            )
+            
+        db.table("care_logs").delete().eq("id", str(logId)).execute()
+        return
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"재배 로그 삭제 중 오류가 발생했습니다: {str(e)}"
         )
 

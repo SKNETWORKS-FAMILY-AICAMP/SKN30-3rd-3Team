@@ -57,6 +57,25 @@ paths:
                 $ref: "#/components/schemas/PlantDetail"
         "404":
           description: Plant not found or access denied
+    patch:
+      summary: Update a plant profile
+      parameters:
+        - $ref: "#/components/parameters/PlantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantUpdate"
+      responses:
+        "200":
+          description: Updated plant profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plant"
+        "404":
+          description: Plant not found or access denied
     delete:
       summary: Delete a plant profile
       parameters:
@@ -102,6 +121,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlantPhoto"
+  /api/v1/plants/{plantId}/care-logs/{logId}:
+    put:
+      summary: Update a care log entry
+      parameters:
+        - $ref: "#/components/parameters/PlantId"
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CareLogUpdate"
+      responses:
+        "200":
+          description: Updated care log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CareLog"
+        "404":
+          description: Plant/log not found or access denied
+    delete:
+      summary: Delete a care log entry
+      parameters:
+        - $ref: "#/components/parameters/PlantId"
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Care log entry deleted successfully
+        "404":
+          description: Plant/log not found or access denied
+  /api/v1/chat/sessions:
+    get:
+      summary: List current user's RAG chat sessions
+      responses:
+        "200":
+          description: List of chat sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatSession"
+  /api/v1/chat/sessions/{sessionId}/messages:
+    get:
+      summary: List messages within a chat session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Messages history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatMessage"
+        "404":
+          description: Chat session not found or access denied
   /api/v1/chat/plant-care:
     post:
       summary: Run plant care RAG consultation
@@ -183,6 +276,9 @@ components:
         sunlight:
           type: string
           example: 오전 직사광선
+        imageUrl:
+          type: string
+          example: https://xyz.supabase.co/storage/v1/object/public/plant-photos/abc.jpg
     Plant:
       allOf:
         - $ref: "#/components/schemas/PlantCreate"
@@ -351,3 +447,66 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/PlantPhoto"
+    PlantUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        species:
+          type: string
+        location:
+          type: string
+        sunlight:
+          type: string
+        imageUrl:
+          type: string
+    CareLogUpdate:
+      type: object
+      properties:
+        wateredAt:
+          type: string
+          format: date
+        leafCondition:
+          type: string
+        soilCondition:
+          type: string
+        memo:
+          type: string
+    ChatSession:
+      type: object
+      required: [id, userId, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        plantId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+    ChatMessage:
+      type: object
+      required: [id, sessionId, sender, content, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        sender:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Citation"
+        createdAt:
+          type: string
+          format: date-time

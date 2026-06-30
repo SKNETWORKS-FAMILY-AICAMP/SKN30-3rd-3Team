@@ -44,6 +44,10 @@ class MockSupabaseTable:
         self.queries.append(("order", field, desc))
         return self
 
+    def update(self, data):
+        self.queries.append(("update", data))
+        return self
+
     def execute(self):
         data = []
         if self.name == "plants":
@@ -61,6 +65,7 @@ class MockSupabaseTable:
                             "species": "Monstera deliciosa",
                             "location": "거실 창가",
                             "sunlight": "간접광",
+                            "image_url": "https://xyz.supabase.co/storage/v1/object/public/plant-photos/abc.jpg",
                             "created_at": "2026-06-01T12:00:00+00:00"
                         }
                     ]
@@ -76,7 +81,22 @@ class MockSupabaseTable:
                         "species": insert_val.get("species"),
                         "location": insert_val.get("location"),
                         "sunlight": insert_val.get("sunlight"),
+                        "image_url": insert_val.get("image_url"),
                         "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                ]
+            elif any(q[0] == "update" for q in self.queries):
+                update_val = next(q[1] for q in self.queries if q[0] == "update")
+                data = [
+                    {
+                        "id": "d3b07384-d113-49c3-a558-1ec114a84d41",
+                        "user_id": str(TEST_USER_ID),
+                        "name": update_val.get("name", "몬스테라"),
+                        "species": update_val.get("species", "Monstera deliciosa"),
+                        "location": update_val.get("location", "거실 창가"),
+                        "sunlight": update_val.get("sunlight", "간접광"),
+                        "image_url": update_val.get("image_url", "https://xyz.supabase.co/storage/v1/object/public/plant-photos/abc.jpg"),
+                        "created_at": "2026-06-01T12:00:00+00:00"
                     }
                 ]
         elif self.name == "care_logs":
@@ -105,6 +125,21 @@ class MockSupabaseTable:
                         "created_at": datetime.now(timezone.utc).isoformat()
                     }
                 ]
+            elif any(q[0] == "update" for q in self.queries):
+                update_val = next(q[1] for q in self.queries if q[0] == "update")
+                data = [
+                    {
+                        "id": "c3b07384-d113-49c3-a558-1ec114a84d42",
+                        "plant_id": "d3b07384-d113-49c3-a558-1ec114a84d41",
+                        "watered_at": update_val.get("watered_at", "2026-06-25"),
+                        "leaf_condition": update_val.get("leaf_condition", "정상"),
+                        "soil_condition": update_val.get("soil_condition", "약간 마름"),
+                        "memo": update_val.get("memo", "정기 물주기"),
+                        "created_at": "2026-06-25T12:00:00+00:00"
+                    }
+                ]
+            elif any(q[0] == "delete" for q in self.queries):
+                data = [{"id": "c3b07384-d113-49c3-a558-1ec114a84d42"}]
         elif self.name == "plant_photos":
             if any(q[0] == "select" for q in self.queries):
                 data = [
@@ -127,6 +162,43 @@ class MockSupabaseTable:
                         "note": insert_val.get("note"),
                         "captured_at": insert_val.get("captured_at"),
                         "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                ]
+        elif self.name == "chat_sessions":
+            if any(q[0] == "select" for q in self.queries):
+                data = [
+                    {
+                        "id": "e3b07384-d113-49c3-a558-1ec114a84d44",
+                        "user_id": str(TEST_USER_ID),
+                        "plant_id": "d3b07384-d113-49c3-a558-1ec114a84d41",
+                        "created_at": "2026-06-25T12:00:00+00:00"
+                    }
+                ]
+        elif self.name == "chat_messages":
+            if any(q[0] == "select" for q in self.queries):
+                data = [
+                    {
+                        "id": "e3b07384-d113-49c3-a558-1ec114a84d45",
+                        "session_id": "e3b07384-d113-49c3-a558-1ec114a84d44",
+                        "sender": "user",
+                        "content": "식물이 아파요",
+                        "citations": [],
+                        "created_at": "2026-06-25T12:01:00+00:00"
+                    },
+                    {
+                        "id": "e3b07384-d113-49c3-a558-1ec114a84d46",
+                        "session_id": "e3b07384-d113-49c3-a558-1ec114a84d44",
+                        "sender": "assistant",
+                        "content": "물을 주세요.",
+                        "citations": [
+                            {
+                                "sourceId": "RAG-DOC-999",
+                                "title": "도감",
+                                "url": "http://nongsaro.go.kr",
+                                "publisher": "농진청"
+                            }
+                        ],
+                        "created_at": "2026-06-25T12:02:00+00:00"
                     }
                 ]
         elif self.name == "plant_catalog":
@@ -315,5 +387,49 @@ def test_delete_plant_success():
     plant_id = "d3b07384-d113-49c3-a558-1ec114a84d41"
     response = client.delete(f"/api/v1/plants/{plant_id}")
     assert response.status_code == 204
+
+def test_update_plant_success():
+    plant_id = "d3b07384-d113-49c3-a558-1ec114a84d41"
+    payload = {"name": "새로운몬스테라", "location": "방 안"}
+    response = client.patch(f"/api/v1/plants/{plant_id}", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "새로운몬스테라"
+    assert data["location"] == "방 안"
+
+def test_update_care_log_success():
+    plant_id = "d3b07384-d113-49c3-a558-1ec114a84d41"
+    log_id = "c3b07384-d113-49c3-a558-1ec114a84d42"
+    payload = {"memo": "수정된 메모", "leafCondition": "아주 좋음"}
+    response = client.put(f"/api/v1/plants/{plant_id}/care-logs/{log_id}", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["memo"] == "수정된 메모"
+    assert data["leafCondition"] == "아주 좋음"
+
+def test_delete_care_log_success():
+    plant_id = "d3b07384-d113-49c3-a558-1ec114a84d41"
+    log_id = "c3b07384-d113-49c3-a558-1ec114a84d42"
+    response = client.delete(f"/api/v1/plants/{plant_id}/care-logs/{log_id}")
+    assert response.status_code == 204
+
+def test_list_chat_sessions_success():
+    response = client.get("/api/v1/chat/sessions")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == "e3b07384-d113-49c3-a558-1ec114a84d44"
+
+def test_list_chat_messages_success():
+    session_id = "e3b07384-d113-49c3-a558-1ec114a84d44"
+    response = client.get(f"/api/v1/chat/sessions/{session_id}/messages")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert data[0]["sender"] == "user"
+    assert data[1]["sender"] == "assistant"
+    assert len(data[1]["citations"]) == 1
 
 
