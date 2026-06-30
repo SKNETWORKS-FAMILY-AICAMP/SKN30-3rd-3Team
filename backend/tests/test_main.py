@@ -36,21 +36,36 @@ class MockSupabaseTable:
         self.queries.append(("or", filter_str))
         return self
 
+    def delete(self):
+        self.queries.append(("delete",))
+        return self
+
+    def order(self, field, desc=False):
+        self.queries.append(("order", field, desc))
+        return self
+
     def execute(self):
         data = []
         if self.name == "plants":
             if any(q[0] == "select" for q in self.queries):
-                data = [
-                    {
-                        "id": "d3b07384-d113-49c3-a558-1ec114a84d41",
-                        "user_id": str(TEST_USER_ID),
-                        "name": "몬스테라",
-                        "species": "Monstera deliciosa",
-                        "location": "거실 창가",
-                        "sunlight": "간접광",
-                        "created_at": "2026-06-01T12:00:00+00:00"
-                    }
-                ]
+                eq_queries = [q for q in self.queries if q[0] == "eq"]
+                invalid_id = any(q[1] == "id" and str(q[2]) == "00000000-0000-0000-0000-000000000000" for q in eq_queries)
+                if invalid_id:
+                    data = []
+                else:
+                    data = [
+                        {
+                            "id": "d3b07384-d113-49c3-a558-1ec114a84d41",
+                            "user_id": str(TEST_USER_ID),
+                            "name": "몬스테라",
+                            "species": "Monstera deliciosa",
+                            "location": "거실 창가",
+                            "sunlight": "간접광",
+                            "created_at": "2026-06-01T12:00:00+00:00"
+                        }
+                    ]
+            elif any(q[0] == "delete" for q in self.queries):
+                data = [{"id": "d3b07384-d113-49c3-a558-1ec114a84d41"}]
             elif any(q[0] == "insert" for q in self.queries):
                 insert_val = next(q[1] for q in self.queries if q[0] == "insert")
                 data = [
@@ -65,7 +80,19 @@ class MockSupabaseTable:
                     }
                 ]
         elif self.name == "care_logs":
-            if any(q[0] == "insert" for q in self.queries):
+            if any(q[0] == "select" for q in self.queries):
+                data = [
+                    {
+                        "id": "c3b07384-d113-49c3-a558-1ec114a84d42",
+                        "plant_id": "d3b07384-d113-49c3-a558-1ec114a84d41",
+                        "watered_at": "2026-06-25",
+                        "leaf_condition": "정상",
+                        "soil_condition": "약간 마름",
+                        "memo": "정기 물주기",
+                        "created_at": "2026-06-25T12:00:00+00:00"
+                    }
+                ]
+            elif any(q[0] == "insert" for q in self.queries):
                 insert_val = next(q[1] for q in self.queries if q[0] == "insert")
                 data = [
                     {
@@ -79,7 +106,18 @@ class MockSupabaseTable:
                     }
                 ]
         elif self.name == "plant_photos":
-            if any(q[0] == "insert" for q in self.queries):
+            if any(q[0] == "select" for q in self.queries):
+                data = [
+                    {
+                        "id": "e3b07384-d113-49c3-a558-1ec114a84d43",
+                        "plant_id": "d3b07384-d113-49c3-a558-1ec114a84d41",
+                        "storage_path": "users/d3b07384/plants/leaf.jpg",
+                        "note": "초기 촬영",
+                        "captured_at": "2026-06-01T12:00:00+00:00",
+                        "created_at": "2026-06-01T12:00:00+00:00"
+                    }
+                ]
+            elif any(q[0] == "insert" for q in self.queries):
                 insert_val = next(q[1] for q in self.queries if q[0] == "insert")
                 data = [
                     {
@@ -255,5 +293,27 @@ def test_search_plant_catalog_no_match():
     data = response.json()
     assert isinstance(data, list)
     assert len(data) == 0
+
+def test_get_plant_detail_success():
+    plant_id = "d3b07384-d113-49c3-a558-1ec114a84d41"
+    response = client.get(f"/api/v1/plants/{plant_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "몬스테라"
+    assert "careLogs" in data
+    assert "photos" in data
+    assert len(data["careLogs"]) > 0
+    assert len(data["photos"]) > 0
+    assert data["careLogs"][0]["leafCondition"] == "정상"
+
+def test_get_plant_detail_not_found():
+    invalid_id = "00000000-0000-0000-0000-000000000000"
+    response = client.get(f"/api/v1/plants/{invalid_id}")
+    assert response.status_code == 404
+
+def test_delete_plant_success():
+    plant_id = "d3b07384-d113-49c3-a558-1ec114a84d41"
+    response = client.delete(f"/api/v1/plants/{plant_id}")
+    assert response.status_code == 204
 
 

@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
+from app.schemas.care_log import CareLog
 
 class PlantCreate(BaseModel):
     name: str = Field(..., description="식물의 이름")
@@ -22,3 +23,7 @@ class PlantPhoto(PlantPhotoCreate):
     id: UUID
     plantId: UUID
     createdAt: datetime
+
+class PlantDetail(Plant):
+    careLogs: List[CareLog] = Field(default_factory=list, description="식물 재배 일지 목록")
+    photos: List[PlantPhoto] = Field(default_factory=list, description="식물 사진 히스토리 목록")

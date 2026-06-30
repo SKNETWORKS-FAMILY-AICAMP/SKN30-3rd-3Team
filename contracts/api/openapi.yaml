@@ -43,6 +43,29 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Plant"
+  /api/v1/plants/{plantId}:
+    get:
+      summary: Get plant detailed profile with care logs and photos
+      parameters:
+        - $ref: "#/components/parameters/PlantId"
+      responses:
+        "200":
+          description: Plant detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantDetail"
+        "404":
+          description: Plant not found or access denied
+    delete:
+      summary: Delete a plant profile
+      parameters:
+        - $ref: "#/components/parameters/PlantId"
+      responses:
+        "204":
+          description: Plant profile deleted successfully
+        "404":
+          description: Plant not found or access denied
   /api/v1/plants/{plantId}/care-logs:
     post:
       summary: Create a care log for a plant
@@ -315,3 +338,16 @@ components:
         description:
           type: string
           example: 큰 잎과 독특한 구멍이 특징인 인테리어 식물
+    PlantDetail:
+      allOf:
+        - $ref: "#/components/schemas/Plant"
+        - type: object
+          properties:
+            careLogs:
+              type: array
+              items:
+                $ref: "#/components/schemas/CareLog"
+            photos:
+              type: array
+              items:
+                $ref: "#/components/schemas/PlantPhoto"
