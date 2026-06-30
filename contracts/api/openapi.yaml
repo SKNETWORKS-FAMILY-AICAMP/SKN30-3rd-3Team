@@ -95,6 +95,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlantCareChatResponse"
+  /api/v1/plant-catalog:
+    get:
+      summary: List or search plant species catalog
+      security: []
+      parameters:
+        - name: q
+          in: query
+          description: Search query for plant name or species
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plant species catalog list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlantCatalogItem"
   /api/v1/uploads/signed-url:
     post:
       summary: Get signed upload URL for plant photo
@@ -277,3 +297,21 @@ components:
         storagePath:
           type: string
           example: users/d3b07384-d113-49c3-a558-1ec114a84d41/plants/abcd-efgh-1234_monstera.jpg
+    PlantCatalogItem:
+      type: object
+      required: [id, name, species]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: 몬스테라 델리시오사
+        species:
+          type: string
+          example: Monstera deliciosa
+        familyName:
+          type: string
+          example: 천남성과
+        description:
+          type: string
+          example: 큰 잎과 독특한 구멍이 특징인 인테리어 식물

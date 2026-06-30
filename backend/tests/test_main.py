@@ -32,6 +32,10 @@ class MockSupabaseTable:
         self.queries.append(("insert", data))
         return self
 
+    def or_(self, filter_str):
+        self.queries.append(("or", filter_str))
+        return self
+
     def execute(self):
         data = []
         if self.name == "plants":
@@ -87,6 +91,23 @@ class MockSupabaseTable:
                         "created_at": datetime.now(timezone.utc).isoformat()
                     }
                 ]
+        elif self.name == "plant_catalog":
+            mock_catalog = [
+                {"id": "cat-001", "name": "몬스테라 델리시오사", "species": "Monstera deliciosa", "family_name": "천남성과", "description": "구멍 난 큰 잎"},
+                {"id": "cat-002", "name": "인도고무나무", "species": "Ficus elastica", "family_name": "뽕나무과", "description": "두꺼운 광택 잎"},
+                {"id": "cat-003", "name": "스킨답서스", "species": "Epipremnum aureum", "family_name": "천남성과", "description": "강인한 생명력"}
+            ]
+            data = mock_catalog
+            or_query = next((q[1] for q in self.queries if q[0] == "or"), None)
+            if or_query:
+                import re
+                matches = re.findall(r'%([^%]+)%', or_query)
+                if matches:
+                    search_term = matches[0].lower()
+                    data = [
+                        item for item in mock_catalog
+                        if search_term in item["name"].lower() or search_term in item["species"].lower()
+                    ]
         return MockAPIResponse(data)
 
 class MockSupabaseStorageBucket:
@@ -115,6 +136,10 @@ class MockSupabaseClient:
 # FastAPI 의존성 주입 오버라이드
 app.dependency_overrides[get_current_user] = lambda: TEST_USER_ID
 app.dependency_overrides[get_supabase_client] = lambda: MockSupabaseClient()
+
+# 글로벌 supabase 클라이언트 오버라이드
+from app.db import session as db_session
+db_session.supabase = MockSupabaseClient()
 
 client = TestClient(app)
 
@@ -198,4 +223,37 @@ def test_create_signed_upload_url():
     assert data["storagePath"].startswith(f"users/{TEST_USER_ID}/plants/")
     assert data["storagePath"].endswith(".png")
     assert "token=mock-token" in data["signedUrl"]
+
+def test_list_plant_catalog_all():
+    response = client.get("/api/v1/plant-catalog")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) >= 3
+    assert any(item["name"] == "몬스테라 델리시오사" for item in data)
+
+def test_search_plant_catalog_by_name():
+    response = client.get("/api/v1/plant-catalog?q=몬스")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["name"] == "몬스테라 델리시오사"
+    assert data[0]["species"] == "Monstera deliciosa"
+
+def test_search_plant_catalog_by_species_case_insensitive():
+    response = client.get("/api/v1/plant-catalog?q=FiCuS")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["name"] == "인도고무나무"
+
+def test_search_plant_catalog_no_match():
+    response = client.get("/api/v1/plant-catalog?q=우주식물")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
 

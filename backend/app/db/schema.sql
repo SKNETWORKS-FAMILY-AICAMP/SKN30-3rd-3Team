@@ -75,6 +75,16 @@ IF NOT EXISTS vector;
                 content TEXT NOT NULL                               ,
                 citations JSONB DEFAULT '[]'::jsonb                 , -- 출처 메타데이터 리스트
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL );
+    -- 7.5. plant_catalog (식물 품종 도감 테이블)
+    CREATE TABLE IF NOT EXISTS public.plant_catalog
+    (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        species     TEXT NOT NULL,
+        family_name TEXT,
+        description TEXT,
+        created_at  TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    );
     -- 8. rag_sources (RAG용 공식 문서 출처 테이블)
     CREATE TABLE IF NOT EXISTS public.rag_sources
         (
@@ -152,6 +162,8 @@ IF NOT EXISTS vector;
         ENABLE ROW LEVEL SECURITY;
     ALTER TABLE public.rag_chunks
         ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.plant_catalog
+        ENABLE ROW LEVEL SECURITY;
     -- 예시 보안 정책 (자신의 데이터만 보고 쓸 수 있도록 허용)
     -- 1) 프로필: 누구나 읽을 수 있고 자기 프로필만 수정 가능
     CREATE POLICY "Allow public read access to profiles" ON public.profiles FOR
@@ -205,3 +217,24 @@ IF NOT EXISTS vector;
     SELECT
     USING
         (true);
+    CREATE POLICY "Allow public read access to plant_catalog" ON public.plant_catalog FOR
+    SELECT
+    USING
+        (true);
+
+    -- =========================================================================
+    -- [권한] Supabase API 역할별 명시적 권한 (GRANT) 부여
+    -- =========================================================================
+    -- postgres, service_role 역할은 스키마 내 모든 권한 소유
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
+    GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, service_role;
+
+    -- 인증된 사용자(authenticated)는 테이블 CRUD 가능 (실제 데이터 접근 범위는 RLS가 제한)
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+    GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
+
+    -- 비인증 사용자(anon)는 조회만 가능
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+    GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon;
