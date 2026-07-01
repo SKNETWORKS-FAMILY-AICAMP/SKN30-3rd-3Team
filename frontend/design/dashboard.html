@@ -1,12 +1,10 @@
-<!DOCTYPE html>
-
-<html class="light" lang="ko"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+﻿<!DOCTYPE html><html class="light" lang="ko"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>Farm하니? - AI 식물 주치의</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
 <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -133,24 +131,26 @@
 </head>
 <body class="bg-background text-on-surface font-body-md selection:bg-primary-fixed selection:text-primary min-h-screen flex flex-col">
 <!-- TopNavBar -->
-<header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-gutter-md bg-surface-container-lowest h-16 shadow-sm">
+<header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-6 bg-surface-container-lowest h-16 border-b border-outline-variant/10 shadow-sm">
 <div class="flex items-center gap-base">
-<img alt="Farm하니? 로고" class="h-8 w-auto" src="https://lh3.googleusercontent.com/aida/AP1WRLu2MqUQGKSbR9vQow9r6sH_Mz3q8L8lSIjh5pw0pWw_ropU2dcirfUORsMm-z5dXWe8xcdikrxpKmgNHNdJdVN5tCnkYug2k61JA_jsM_i5vXD8Q4JZYJd6oTfniWEnoDqkRuEDp7jE4OdsXuRglNSaFoW08hqlU45Pq5zkzn0uw0PvqdOJyNDki6REkzKFm57n4dpd8u-6Pwn_uDo9Y5YTA0XcgNrZXhoRmxcFQQjKVlG5bN8YWJ2NtQ"/>
-<span class="text-headline-md font-headline-md font-bold text-primary">Farm하니?</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">potted_plant</span>
+<span class="font-bold text-xl text-primary-container" style="font-family: Manrope, sans-serif;">Farm하니?</span>
 </div>
-<nav class="hidden md:flex items-center gap-8">
-<a class="text-primary border-b-2 border-primary pb-1 font-label-md transition-colors" href="#">내 식물</a>
-<a class="text-on-surface-variant hover:text-primary transition-colors font-label-md" href="#">AI 상담</a>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-primary border-b-2 border-primary pb-1 text-base font-medium transition-colors" href="#">내 식물</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors text-base font-medium" href="#">AI 상담</a>
 </nav>
 <div class="flex items-center gap-4">
 <div class="relative hidden sm:block">
 <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
-<input class="pl-10 pr-4 py-2 bg-surface-container rounded-full border-none text-label-md focus:ring-2 focus:ring-primary w-64" placeholder="식물 검색..." type="text"/>
+<input class="pl-10 pr-4 py-2 bg-surface-container rounded-full border-none text-label-md focus:ring-2 focus:ring-primary w-64" placeholder="식물 검색..." type="text">
 </div>
-<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer">notifications</button>
-<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer">settings</button>
-<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant cursor-pointer active:scale-95">
-<img class="w-full h-full object-cover" data-alt="User profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqxF5Y2WwyKChI2oiPJMyKFwvbOwF_Yq1sKmVt-yDFKiikdTu96rXhdhH1tRV4iObQ74dujtAog1qYhBVEJxtxCu22VcG7x-2ci0QWbnNEI6cLH7PCqL39auHwimAxgoAj0ln3s8Q3-Py4GMfI5DblfM4ASBtEdelc48eR4cPNyXaRP8wk7nwFG4TQl3Cpet_OPRn05fISHhVfu0-sVfrQ2up2doiVoiMDzt0OekYaXV7guL2a7Q1m"/>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer w-6 h-6 flex items-center justify-center">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer active:scale-95 w-6 h-6 flex items-center justify-center">dark_mode</button><button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer w-6 h-6 flex items-center justify-center">settings</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant cursor-pointer active:scale-95 flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="User profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqxF5Y2WwyKChI2oiPJMyKFwvbOwF_Yq1sKmVt-yDFKiikdTu96rXhdhH1tRV4iObQ74dujtAog1qYhBVEJxtxCu22VcG7x-2ci0QWbnNEI6cLH7PCqL39auHwimAxgoAj0ln3s8Q3-Py4GMfI5DblfM4ASBtEdelc48eR4cPNyXaRP8wk7nwFG4TQl3Cpet_OPRn05fISHhVfu0-sVfrQ2up2doiVoiMDzt0OekYaXV7guL2a7Q1m">
 </div>
 </div>
 </header>
@@ -169,11 +169,11 @@
 <div class="flex items-center gap-3 p-3 mb-1 cursor-pointer hover:bg-growth-light rounded-lg transition-all text-on-surface-variant">
 <span class="material-symbols-outlined">potted_plant</span>
 <span class="text-label-md">다육이</span>
-</div>
+<span class="ml-auto text-label-sm bg-surface-container-high px-2 py-0.5 rounded-full opacity-70">2</span></div>
 <div class="flex items-center gap-3 p-3 mb-1 cursor-pointer hover:bg-growth-light rounded-lg transition-all text-on-surface-variant">
 <span class="material-symbols-outlined">eco</span>
 <span class="text-label-md">관엽식물</span>
-</div>
+<span class="ml-auto text-label-sm bg-surface-container-high px-2 py-0.5 rounded-full opacity-70">5</span></div>
 <div class="flex items-center gap-3 p-3 mb-1 cursor-pointer hover:bg-growth-light rounded-lg transition-all text-on-surface-variant">
 <span class="material-symbols-outlined">history</span>
 <span class="text-label-md">최근 진단</span>
@@ -181,7 +181,7 @@
 </div>
 <button class="mt-8 mx-2 py-3 bg-primary text-on-primary rounded-xl font-label-md hover:bg-primary-container transition-all flex items-center justify-center gap-2 shadow-sm">
 <span class="material-symbols-outlined">add</span>
-<span>카테고리 추가</span>
+<span class="">카테고리 추가</span>
 </button>
 </aside>
 <!-- Main Content -->
@@ -189,23 +189,7 @@
 <div class="max-w-max-width mx-auto">
 <!-- Welcome & CTA Section - Matching SCREEN_14 Layout -->
 <section class="grid grid-cols-1 lg:grid-cols-3 gap-gutter-md mb-gutter-md">
-<div class="lg:col-span-2 relative overflow-hidden rounded-3xl bg-primary-container p-10 text-on-primary-container shadow-lg flex flex-col justify-center min-h-[320px]">
-<div class="absolute right-[-50px] top-[-50px] opacity-20 pointer-events-none">
-<span class="material-symbols-outlined text-[300px]" style="font-variation-settings: 'FILL' 1;">spa</span>
-</div>
-<h1 class="text-display-lg font-display-lg mb-4">안녕하세요, 식물 집사님!</h1>
-<p class="text-body-lg mb-8 max-w-md opacity-90">오늘 당신의 반려 식물들은 어떤가요? AI 주치의와 함께 건강하게 케어해보세요.</p>
-<div class="flex flex-wrap gap-4">
-<button class="px-6 py-3 bg-white text-primary font-bold rounded-xl flex items-center gap-2 hover:scale-105 transition-transform shadow-sm">
-<span class="material-symbols-outlined">auto_awesome</span>
-                            빠른 AI 진단
-                        </button>
-<button class="px-6 py-3 bg-primary-fixed-dim/30 border border-on-primary-container/20 text-on-primary-container font-bold rounded-xl flex items-center gap-2 hover:bg-primary-fixed-dim/40 transition-all">
-<span class="material-symbols-outlined">add_circle</span>
-                            새 식물 추가
-                        </button>
-</div>
-</div>
+<div class="lg:col-span-2 relative overflow-hidden rounded-3xl p-10 text-on-primary-container shadow-lg flex flex-col justify-center min-h-[320px] bg-primary" style="background-image: linear-gradient(rgba(15, 82, 56, 0.7), rgba(15, 82, 56, 0.7)), url('/design/dashboard_plant.png'); background-size: cover; background-position: center; animation: sway 10s ease-in-out infinite alternate;"><h1 class="text-display-lg font-display-lg mb-4 text-white">안녕하세요, 식물 집사님!</h1><p class="text-body-lg mb-8 max-w-md text-white/90">오늘 당신의 반려 식물들은 어떤가요? AI 주치의와 함께 건강하게 케어해보세요.</p><div class="flex flex-wrap gap-4"><button class="px-6 py-3 bg-white text-primary font-bold rounded-xl flex items-center gap-2 hover:scale-105 transition-transform shadow-sm"><span class="material-symbols-outlined">auto_awesome</span>빠른 AI 진단</button><button class="px-6 py-3 bg-white/10 border border-white/20 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-white/20 transition-all"><span class="material-symbols-outlined">add_circle</span>새 식물 추가</button></div></div>
 <!-- Health Overview Card - Matching SCREEN_14 Proportions -->
 <div class="glass-card rounded-3xl p-8 flex flex-col justify-between shadow-sm border border-outline-variant/30 min-h-[320px]">
 <div>
@@ -216,7 +200,7 @@
 <div class="flex items-center gap-4 mb-6">
 <div class="w-16 h-16 rounded-full border-4 border-sage-accent flex items-center justify-center">
 <span class="text-label-md font-bold text-primary">92%</span>
-</div>
+</div><div class="group relative"><span class="material-symbols-outlined text-sm text-outline cursor-help">info</span><div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-inverse-surface text-inverse-on-surface text-[10px] p-2 rounded shadow-lg whitespace-nowrap z-50">수분 95% | 광량 88% | 영양 93%</div></div>
 <div>
 <p class="text-label-md font-bold">종합 활력도</p>
 <p class="text-label-sm text-on-surface-variant">12/13 식물이 잘 자라고 있어요</p>
@@ -250,7 +234,7 @@
 <!-- Plant Card 1 -->
 <div class="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all group cursor-pointer border border-outline-variant/10">
 <div class="relative h-48 overflow-hidden">
-<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Monstera Deliciosa" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMj3unhKIu_PbScTPMhtaHbfBjyyxKkgGNZZzOJSIlPS3bNQEkvZCmIcyl0vJ9uoYUdt8MQu25QETw15VUPfKNvAFf0ONH8V2Ih7JJQGz7oEdbgDi_j7Xt4gnfjZ2AvhU94Do_pOP8gFWpQQJpO40pL8GxUugqTBDNOCWAC4J8SBNMQcC4TWmQfQlr1TnD8vdObgLWUJWpuDuWuTDUcpiJzRMvR89Xs0Wirc-8zkzf7SCSuao8uMna"/>
+<img alt="건강하게 자라고 있는 몬스테라 식물" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMj3unhKIu_PbScTPMhtaHbfBjyyxKkgGNZZzOJSIlPS3bNQEkvZCmIcyl0vJ9uoYUdt8MQu25QETw15VUPfKNvAFf0ONH8V2Ih7JJQGz7oEdbgDi_j7Xt4gnfjZ2AvhU94Do_pOP8gFWpQQJpO40pL8GxUugqTBDNOCWAC4J8SBNMQcC4TWmQfQlr1TnD8vdObgLWUJWpuDuWuTDUcpiJzRMvR89Xs0Wirc-8zkzf7SCSuao8uMna">
 <div class="absolute top-4 right-4 bg-white/80 backdrop-blur-md px-3 py-1 rounded-full text-label-sm font-bold text-primary flex items-center gap-1">
 <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
                                 건강함
@@ -263,7 +247,7 @@
 <div class="flex flex-col">
 <span class="text-[10px] uppercase tracking-wider text-outline">마지막 물주기</span>
 <span class="text-label-md font-medium">어제</span>
-</div>
+<span class="text-[10px] uppercase tracking-wider text-tertiary mt-2">다음 물주기 예정일</span><span class="text-label-sm font-medium text-tertiary">3일 후 예정</span></div>
 <button class="w-10 h-10 rounded-full bg-growth-light text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all">
 <span class="material-symbols-outlined">water_drop</span>
 </button>
@@ -273,7 +257,7 @@
 <!-- Plant Card 2 -->
 <div class="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all group cursor-pointer border border-outline-variant/10">
 <div class="relative h-48 overflow-hidden">
-<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Succulent" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBI07eRnYaBkbTpxqvNZ9vnRjVD9VVXbqhPFYWq-ap7nJUIHC6QgxpossrgiYz_f6mDHbl7qI44WFh8cDt45kl2gQdmiFYaEjRUk22N2YmAViAiXpQSkwmt8j5B8_89jgdZEzsQaHiRRzVv7iaOyce5PY0mhS9RrbzPBp1M4beqf_V55uFwJu-5CEeM6Ex79kKycbzIYrLRmJ8DKXkEvb62z9w28efvLoHwPwLJbspa8b8FvgKTBFtd"/>
+<img alt="화분에 심어진 다육 식물" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBI07eRnYaBkbTpxqvNZ9vnRjVD9VVXbqhPFYWq-ap7nJUIHC6QgxpossrgiYz_f6mDHbl7qI44WFh8cDt45kl2gQdmiFYaEjRUk22N2YmAViAiXpQSkwmt8j5B8_89jgdZEzsQaHiRRzVv7iaOyce5PY0mhS9RrbzPBp1M4beqf_V55uFwJu-5CEeM6Ex79kKycbzIYrLRmJ8DKXkEvb62z9w28efvLoHwPwLJbspa8b8FvgKTBFtd">
 <div class="absolute top-4 right-4 bg-white/80 backdrop-blur-md px-3 py-1 rounded-full text-label-sm font-bold text-primary flex items-center gap-1">
 <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
                                 건강함
@@ -286,7 +270,7 @@
 <div class="flex flex-col">
 <span class="text-[10px] uppercase tracking-wider text-outline">마지막 물주기</span>
 <span class="text-label-md font-medium">10일 전</span>
-</div>
+<span class="text-[10px] uppercase tracking-wider text-tertiary mt-2">다음 물주기 예정일</span><span class="text-label-sm font-medium text-tertiary">14일 후 예정</span></div>
 <button class="w-10 h-10 rounded-full bg-growth-light text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all">
 <span class="material-symbols-outlined">water_drop</span>
 </button>
@@ -296,7 +280,7 @@
 <!-- Plant Card 3 -->
 <div class="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all group cursor-pointer border border-outline-variant/10">
 <div class="relative h-48 overflow-hidden">
-<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Fiddle Leaf Fig" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm43PKL_AAaCenElEZ2D3ataYVpN3ZTP3KkIIZc4xUlj1BcrvyTQGDEV0AV_qeGKbLEisS-ZaGoqCLwsaDrb4ki1X7mRSJbUBo9RROa1xz5m2ymG5v1oaSnIZU-Dw6Ibo8iItfjVC8G0vmc6hy6o219zCSj-Y3N1uooupkxfdUbuZTEuhk0e_xxGl8b-3hPx3DrWS6Wsc3C9SueEUjXSHiFbZri6a08EMk-w-7Pxe-LqoHXEbUlPe-"/>
+<img alt="거실에 놓인 떡갈고무나무" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm43PKL_AAaCenElEZ2D3ataYVpN3ZTP3KkIIZc4xUlj1BcrvyTQGDEV0AV_qeGKbLEisS-ZaGoqCLwsaDrb4ki1X7mRSJbUBo9RROa1xz5m2ymG5v1oaSnIZU-Dw6Ibo8iItfjVC8G0vmc6hy6o219zCSj-Y3N1uooupkxfdUbuZTEuhk0e_xxGl8b-3hPx3DrWS6Wsc3C9SueEUjXSHiFbZri6a08EMk-w-7Pxe-LqoHXEbUlPe-">
 <div class="absolute top-4 right-4 bg-diagnostic-red/10 border border-diagnostic-red/20 px-3 py-1 rounded-full text-label-sm font-bold text-diagnostic-red flex items-center gap-1">
 <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">warning</span>
                                 주의 필요
@@ -309,7 +293,7 @@
 <div class="flex flex-col">
 <span class="text-[10px] uppercase tracking-wider text-outline">마지막 물주기</span>
 <span class="text-label-md font-medium">5일 전</span>
-</div>
+<span class="text-[10px] uppercase tracking-wider text-tertiary mt-2">다음 물주기 예정일</span><span class="text-label-sm font-medium text-diagnostic-red">오늘 예정</span></div>
 <button class="w-10 h-10 rounded-full bg-diagnostic-red text-white flex items-center justify-center animate-pulse">
 <span class="material-symbols-outlined">water_drop</span>
 </button>
@@ -403,4 +387,6 @@
         });
     }
 </script>
+
+
 </body></html>

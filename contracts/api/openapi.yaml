@@ -227,6 +227,15 @@ paths:
           required: false
           schema:
             type: string
+        - name: limit
+          in: query
+          description: Maximum autocomplete result count
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
       responses:
         "200":
           description: Plant species catalog list
@@ -252,6 +261,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UploadSignedUrlResponse"
+  /api/v1/uploads/plant-photo:
+    post:
+      summary: Upload plant photo through backend and register metadata
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/PlantPhotoUploadRequest"
+      responses:
+        "201":
+          description: Uploaded and registered photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantPhoto"
 components:
   securitySchemes:
     bearerAuth:
@@ -389,6 +414,12 @@ components:
             $ref: "#/components/schemas/Citation"
         safetyNotice:
           type: string
+        sessionId:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
     Citation:
       type: object
       required: [sourceId, title]
@@ -421,6 +452,21 @@ components:
         storagePath:
           type: string
           example: users/d3b07384-d113-49c3-a558-1ec114a84d41/plants/abcd-efgh-1234_monstera.jpg
+    PlantPhotoUploadRequest:
+      type: object
+      required: [plantId, file]
+      properties:
+        plantId:
+          type: string
+          format: uuid
+        note:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
+        file:
+          type: string
+          format: binary
     PlantCatalogItem:
       type: object
       required: [id, name, species]

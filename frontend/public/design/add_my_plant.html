@@ -1,12 +1,10 @@
-<!DOCTYPE html>
-
-<html class="light" lang="ko"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<!DOCTYPE html><html class="light" lang="ko" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>신규 식물 등록 | Farm하니?</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
 <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -122,7 +120,12 @@
 <!-- TopNavBar -->
 <header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-gutter-md bg-surface-container-lowest dark:bg-inverse-surface h-16 shadow-sm dark:shadow-none">
 <div class="flex items-center gap-4">
-<span class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed-dim">Farm하니?</span>
+<div class="flex items-center gap-2">
+  <div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-3xl" style="font-variation-settings: &quot;FILL&quot; 1;">potted_plant</span>
+</div>
+  <span class="font-bold text-xl text-primary-container">Farm하니?</span>
+</div>
 </div>
 <nav class="hidden md:flex items-center gap-8">
 <a class="text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-200 font-label-md text-label-md" href="#">내 식물</a>
@@ -130,9 +133,9 @@
 </nav>
 <div class="flex items-center gap-4">
 <button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-growth-light rounded-full transition-all">notifications</button>
-<button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-growth-light rounded-full transition-all">settings</button>
-<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center overflow-hidden border border-outline-variant/30">
-<img class="w-full h-full object-cover" data-alt="A clean, professional headshot of a person with a friendly expression, soft studio lighting, minimalist background with a slight green tint to match the botanical brand aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMVifnzxm5IhVbdugKWE9a1-3z-4E-DCrSFpMZxfbeahApIgYWyr4z3anWq01FODOwZNXBaN0L7wrFDVdvAyxjXGitkl2QNNAdAtmcmtrFwseEfZtlWa9_OrpCCRe5_iSY0--06y9SIEe_SeDoEDhmt-y3jLfDkcuGC0DOX6No-d0AdXoCaTIm5uNJO8uJ08FpXbrBqIxFnr26-2T94Q-mfaMMSxDjLkw7zibw7IExOsAAEOlhEaAW"/>
+<button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-growth-light rounded-full transition-all" onclick="document.documentElement.classList.toggle('dark')">dark_mode</button><button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-growth-light rounded-full transition-all">settings</button>
+<div class="w-6 h-6 rounded-full bg-primary-fixed flex items-center justify-center overflow-hidden border border-outline-variant/30">
+<img alt="사용자 프로필 사진" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMVifnzxm5IhVbdugKWE9a1-3z-4E-DCrSFpMZxfbeahApIgYWyr4z3anWq01FODOwZNXBaN0L7wrFDVdvAyxjXGitkl2QNNAdAtmcmtrFwseEfZtlWa9_OrpCCRe5_iSY0--06y9SIEe_SeDoEDhmt-y3jLfDkcuGC0DOX6No-d0AdXoCaTIm5uNJO8uJ08FpXbrBqIxFnr26-2T94Q-mfaMMSxDjLkw7zibw7IExOsAAEOlhEaAW">
 </div>
 </div>
 </header>
@@ -168,11 +171,22 @@
 <div class="space-y-6">
 <div>
 <label class="block font-label-md text-label-md text-on-surface-variant mb-2 ml-1" for="plant-name">식물 별명</label>
-<input class="w-full h-14 bg-surface-container-low border-none rounded-lg px-4 text-body-lg focus:ring-2 focus:ring-primary-container transition-all" id="plant-name" placeholder="예: 초록이, 광합성왕" type="text"/>
+<input class="w-full h-14 bg-surface-container-low border-none rounded-lg px-4 text-body-lg focus:ring-2 focus:ring-primary-container transition-all" id="plant-name" oninput="document.getElementById('preview-name').innerText = this.value || '새로운 식물'" placeholder="예: 초록이, 광합성왕" type="text">
 </div>
 <div class="flex items-center gap-3 p-4 bg-growth-light/30 rounded-lg border border-primary/10">
 <span class="material-symbols-outlined text-primary">info</span>
 <p class="font-label-sm text-label-sm text-primary">이름을 지어주면 관리 요건과 건강 상태를 더 효과적으로 추적할 수 있습니다.</p>
+</div><div class="mt-8 p-6 bg-surface-container-low rounded-xl border border-outline-variant/30">
+<p class="text-label-sm font-label-sm text-on-surface-variant mb-4">미리보기</p>
+<div class="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
+<div class="w-12 h-12 rounded-full bg-sage-accent/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">potted_plant</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-primary" id="preview-name">새로운 식물</h3>
+<p class="text-label-sm text-on-surface-variant">방금 등록됨</p>
+</div>
+</div>
 </div>
 </div>
 </section>
@@ -184,7 +198,7 @@
 <label class="block font-label-md text-label-md text-on-surface-variant mb-2 ml-1" for="species-search">검색 또는 선택</label>
 <div class="relative">
 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
-<input class="w-full h-14 bg-surface-container-low border-none rounded-lg pl-12 pr-4 text-body-lg focus:ring-2 focus:ring-primary-container transition-all" id="species-search" placeholder="수천 가지 품종 검색..." type="text"/>
+<input class="w-full h-14 bg-surface-container-low border-none rounded-lg pl-12 pr-4 text-body-lg focus:ring-2 focus:ring-primary-container transition-all" id="species-search" placeholder="수천 가지 품종 검색..." type="text">
 </div>
 <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
 <button class="flex items-center gap-3 p-3 rounded-lg border border-outline-variant hover:border-primary hover:bg-growth-light/20 transition-all text-left">
@@ -211,7 +225,7 @@
 <div class="space-y-6">
 <div>
 <label class="block font-label-md text-label-md text-on-surface-variant mb-2 ml-1" for="purchase-date">들여온 날짜</label>
-<input class="w-full h-14 bg-surface-container-low border-none rounded-lg px-4 text-body-lg focus:ring-2 focus:ring-primary-container transition-all" id="purchase-date" type="date"/>
+<input class="w-full h-14 bg-surface-container-low border-none rounded-lg px-4 text-body-lg focus:ring-2 focus:ring-primary-container transition-all" id="purchase-date" type="date">
 </div>
 <div class="flex items-center gap-4">
 <button class="px-4 py-2 rounded-full border border-outline-variant font-label-sm text-label-sm hover:bg-surface-container transition-all">오늘</button>
@@ -255,10 +269,7 @@
                 </button>
 <div class="flex items-center gap-2">
 <button class="px-6 py-3 font-label-md text-label-md text-on-surface-variant hover:text-primary transition-all" id="skip-btn" onclick="nextStep()">건너뛰기</button>
-<button class="flex items-center gap-2 px-8 py-3 bg-primary text-on-primary rounded-lg font-label-md text-label-md shadow-md hover:shadow-lg active:scale-95 transition-all" id="next-btn" onclick="nextStep()">
-                        계속하기
-                        <span class="material-symbols-outlined">arrow_forward</span>
-</button>
+<button class="flex items-center gap-2 px-8 py-3 bg-primary text-on-primary rounded-lg font-label-md text-label-md shadow-md hover:shadow-lg active:scale-95 transition-all" id="next-btn" onclick="nextStep()">계속하기 <span class="material-symbols-outlined">arrow_forward</span></button>
 </div>
 </div>
 </div>
@@ -381,4 +392,8 @@
     // Initialize UI
     updateUI();
 </script>
+
+
+
+
 </body></html>

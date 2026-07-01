@@ -1,11 +1,9 @@
-<!DOCTYPE html>
-
-<html class="light" lang="ko"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<!DOCTYPE html><html class="light" lang="ko" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>식물 상세 및 성장 일지 | Farm하니?</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
 <style>
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -126,27 +124,36 @@
 <body class="bg-background text-on-surface font-body-md selection:bg-sage-accent/30 custom-scrollbar">
 <!-- TopNavBar -->
 <header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-gutter-md bg-surface-container-lowest dark:bg-inverse-surface h-16 shadow-sm dark:shadow-none">
-<div class="flex items-center gap-2">
-<span class="material-symbols-outlined text-primary text-3xl">potted_plant</span>
-<span class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed-dim">Farm하니?</span>
-</div>
-<nav class="hidden md:flex items-center gap-8">
-<a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary dark:border-primary-fixed-dim pb-1 font-label-md text-label-md cursor-pointer active:scale-95 transition-colors duration-200" href="#">내 식물</a>
-<a class="text-on-surface-variant dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-200 cursor-pointer active:scale-95" href="#">AI 컨설팅</a>
-</nav>
-<div class="flex items-center gap-4">
-<div class="hidden md:flex bg-surface-container rounded-full px-4 py-1.5 items-center gap-2">
-<span class="material-symbols-outlined text-outline text-sm">search</span>
-<input class="bg-transparent border-none focus:ring-0 text-label-md w-48 p-0" placeholder="식물 종류 검색..." type="text"/>
-</div>
-<div class="flex items-center gap-2">
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary p-2">notifications</span>
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary p-2">settings</span>
-<div class="w-8 h-8 rounded-full overflow-hidden ml-2 border border-outline-variant">
-<img class="w-full h-full object-cover" data-alt="A professional user profile portrait of a woman with a warm smile, set against a blurred background of a lush indoor garden. The image has a clean, airy quality with high-key lighting that emphasizes the minimalist and professional aesthetic of the Plant Doctor AI application, using soft greens and neutrals." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3r9SXNCb9l2Tb-tVgxcho2vfT3zB4ODkaQHnuQngsEddrPwIO78t_1rRWBykn_DZNr3gmVoKZ3J4ByEnEjZpAX44n7l1vzgJ6tnyXn76JM7vjWdGgy5JKBtXV4JNE3h39lO0itX3FT5OYTHfe2LYwGjFGJqtxzGF7nO6O0OfjeZo-0HlLqMmx_95ZaGTKQFwWfviHUjfPJYQbeuGBPVj-212mci2DjWKuyznUd2uI_UK2Qsa3o8Oy"/>
-</div>
-</div>
-</div>
+  <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-primary-container text-2xl" style="font-variation-settings: 'FILL' 1;">potted_plant</span>
+      <span class="text-xl font-bold text-primary-container tracking-tight">Farm하니?</span>
+    </div>
+  </div>
+  <nav class="hidden md:flex items-center gap-8">
+    <a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary dark:border-primary-fixed-dim pb-1 font-label-md text-label-md cursor-pointer active:scale-95 transition-colors duration-200" href="#">내 식물</a>
+    <a class="text-on-surface-variant dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-200 cursor-pointer active:scale-95" href="#">AI 상담</a>
+  </nav>
+  <div class="flex items-center gap-4">
+    <div class="hidden md:flex bg-surface-container rounded-full px-4 py-1.5 items-center gap-2">
+      <span class="material-symbols-outlined text-outline text-sm">search</span>
+      <input class="bg-transparent border-none focus:ring-0 text-label-md w-48 p-0" placeholder="식물 종류 검색..." type="text">
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">notifications</span>
+      </button>
+      <button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">dark_mode</span>
+      </button>
+      <button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">settings</span>
+      </button>
+      <div class="w-8 h-8 rounded-full overflow-hidden ml-2 border border-outline-variant cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all">
+        <img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3r9SXNCb9l2Tb-tVgxcho2vfT3zB4ODkaQHnuQngsEddrPwIO78t_1rRWBykn_DZNr3gmVoKZ3J4ByEnEjZpAX44n7l1vzgJ6tnyXn76JM7vjWdGgy5JKBtXV4JNE3h39lO0itX3FT5OYTHfe2LYwGjFGJqtxzGF7nO6O0OfjeZo-0HlLqMmx_95ZaGTKQFwWfviHUjfPJYQbeuGBPVj-212mci2DjWKuyznUd2uI_UK2Qsa3o8Oy">
+      </div>
+    </div>
+  </div>
 </header>
 <div class="flex min-h-screen pt-16">
 <!-- SideNavBar -->
@@ -187,9 +194,9 @@
 <div class="max-w-max-width mx-auto">
 <!-- Breadcrumbs -->
 <div class="flex items-center gap-2 mb-6 text-on-surface-variant font-label-sm text-label-sm">
-<span>내 식물</span>
+<span class="">내 식물</span>
 <span class="material-symbols-outlined text-[14px]">chevron_right</span>
-<span>다육식물</span>
+<span class="">다육식물</span>
 <span class="material-symbols-outlined text-[14px]">chevron_right</span>
 <span class="text-primary font-bold">몬스테라 델리시오사</span>
 </div>
@@ -198,7 +205,7 @@
 <!-- Image Card -->
 <div class="lg:col-span-5 relative group overflow-hidden rounded-2xl shadow-lg aspect-square lg:aspect-auto lg:h-[500px]">
 <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-10"></div>
-<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A lush and vibrant Monstera Deliciosa with large, split heart-shaped leaves, photographed in a high-end minimalist ceramic pot. The lighting is soft and natural, suggesting a bright window nearby. The overall aesthetic is clean, organic, and professional, perfectly fitting a sophisticated plant care app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3j5_6QaCIBChB_8oeRnQhjT0oU9wwtIyhx0TGvIxC9ZmxlA3lJPIBUs-gICNedovdZqa7nyZsq73DvtmnDDG7bZ2kHZUx3VJs3KsrhlYsIfRPp9DV7HDfCpjByosECvCL4NKaeyc8xRITeoyfJK1TLGXFfH691LvjeO_C9mjJ8Xp1GrGf8U_iYRiqbjnn9Sps73Uj4BVNHcVLo-FFymF8B5vZsPYwn_xZDVREcvSinY-CWUhvFBFk"/>
+<img alt="A lush and vibrant Monstera Deliciosa with large, split heart-shaped leaves, photographed in a high-end minimalist ceramic pot. The lighting is soft and natural, suggesting a bright window nearby. The overall aesthetic is clean, organic, and professional, perfectly fitting a sophisticated plant care app." class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3j5_6QaCIBChB_8oeRnQhjT0oU9wwtIyhx0TGvIxC9ZmxlA3lJPIBUs-gICNedovdZqa7nyZsq73DvtmnDDG7bZ2kHZUx3VJs3KsrhlYsIfRPp9DV7HDfCpjByosECvCL4NKaeyc8xRITeoyfJK1TLGXFfH691LvjeO_C9mjJ8Xp1GrGf8U_iYRiqbjnn9Sps73Uj4BVNHcVLo-FFymF8B5vZsPYwn_xZDVREcvSinY-CWUhvFBFk">
 <div class="absolute bottom-6 left-6 z-20 text-white">
 <h1 class="text-display-lg font-display-lg">몬티</h1>
 <p class="text-body-lg font-body-lg opacity-90 italic">Monstera Deliciosa</p>
@@ -227,7 +234,7 @@
 <div class="relative w-20 h-20 flex items-center justify-center mb-3">
 <svg class="w-full h-full -rotate-90">
 <circle class="text-outline-variant" cx="40" cy="40" fill="transparent" r="36" stroke="currentColor" stroke-width="4"></circle>
-<circle class="text-primary" cx="40" cy="40" fill="transparent" r="36" stroke="currentColor" stroke-dasharray="226" stroke-dashoffset="45" stroke-width="4"></circle>
+<circle class="text-primary" cx="40" cy="40" fill="transparent" r="36" stroke="currentColor" stroke-dasharray="226" stroke-dashoffset="45" stroke-width="4" style="stroke-dashoffset: 45; transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);"></circle>
 </svg>
 <span class="absolute text-label-md font-bold text-primary">82%</span>
 </div>
@@ -295,6 +302,11 @@
 <span class="material-symbols-outlined">add_a_photo</span>
                         새 일지 작성
                     </button>
+</div><div class="flex gap-2 mb-8 overflow-x-auto pb-2 custom-scrollbar">
+<button class="px-4 py-1.5 rounded-full bg-primary text-white text-label-sm font-bold whitespace-nowrap">전체</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-label-sm hover:bg-growth-light transition-colors whitespace-nowrap">물주기</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-label-sm hover:bg-growth-light transition-colors whitespace-nowrap">영양</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant text-label-sm hover:bg-growth-light transition-colors whitespace-nowrap">AI 진단</button>
 </div>
 <!-- Timeline Layout -->
 <div class="relative pl-8 md:pl-0">
@@ -306,18 +318,21 @@
 <!-- Journal Entry 1 (Left Aligned Desktop) -->
 <div class="relative flex flex-col md:flex-row items-start md:items-center">
 <div class="md:w-1/2 md:pr-12 md:text-right order-2 md:order-1 mt-4 md:mt-0">
-<div class="bg-white p-6 rounded-2xl shadow-sm border border-outline-variant/10 hover:shadow-md transition-all">
+<div class="bg-growth-light/30 p-6 rounded-2xl shadow-sm border border-primary/10 hover:shadow-md transition-all relative overflow-hidden">
+<div class="absolute top-0 right-0 bg-primary text-white px-3 py-1 rounded-bl-lg text-[10px] font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">psychology</span> AI 진단
+    </div>
 <span class="text-label-sm text-primary font-bold block mb-2">오늘, 오전 10:45</span>
 <h4 class="text-headline-md font-bold mb-2">새 잎이 펴졌어요!</h4>
 <p class="text-body-md text-on-surface-variant mb-4">
-                                        우리가 지켜보던 큰 찢잎이 드디어 완전히 펴졌습니다. 밝은 녹색에 매우 건강해 보입니다. 갈변 현상은 전혀 없습니다.
-                                    </p>
+        우리가 지켜보던 큰 찢잎이 드디어 완전히 펴졌습니다. 밝은 녹색에 매우 건강해 보입니다. 갈변 현상은 전혀 없습니다.
+    </p>
 <div class="grid grid-cols-2 gap-2">
 <div class="rounded-lg overflow-hidden h-32">
-<img class="w-full h-full object-cover" data-alt="Close-up of a new, bright green Monstera deliciosa leaf unfurling." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXmQo-XhUa1e6KyANApBh15H7rKrBHBXgZTU89xdhMkNjqCpBTZ0rpO025A8NtjVTvO257y7-67uipqXlndyB73Wb1mFwPAHGWCwTLdXvLRHq07T3aESGsDCO0Fzk1GTrG3Nr0Xtt5kwds-fgXVg8Sr8TwjGvxFBZMZRoejyfESNffy7LbR4LjkiKlJGKcSWhcqPLhlpolu_AxWhBUatKk3habk8WGd7Q0HFWHbUmmT29wgK1qJvWS"/>
+<img alt="Close-up of a new, bright green Monstera deliciosa leaf unfurling." class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXmQo-XhUa1e6KyANApBh15H7rKrBHBXgZTU89xdhMkNjqCpBTZ0rpO025A8NtjVTvO257y7-67uipqXlndyB73Wb1mFwPAHGWCwTLdXvLRHq07T3aESGsDCO0Fzk1GTrG3Nr0Xtt5kwds-fgXVg8Sr8TwjGvxFBZMZRoejyfESNffy7LbR4LjkiKlJGKcSWhcqPLhlpolu_AxWhBUatKk3habk8WGd7Q0HFWHbUmmT29wgK1qJvWS">
 </div>
 <div class="rounded-lg overflow-hidden h-32">
-<img class="w-full h-full object-cover" data-alt="Macro photo showing the detail of a Monstera leaf stem with a new sprout emerging." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOBEWwa3NwCmJgDvvdzFekyg3epN6eCybvl_E2F2NcK4rKaeGFX0bnkBa62-HQfAOmvW6gtNTPu38VAnb6D6teTayM6nS2JR3e9V6t0C2NYKURmRQEWNgBfsBPlI51Bbtk8UEZoVxiRh6lBB3U5vueT2q33xNC2g6olQ38mnV0rx3860LyA3nKJ2lzFd2fwixtTUIb0EPK87fefoemZPI-gbODXOYsoG65J-GDZ2idbJJF9j3_ldDu"/>
+<img alt="Macro photo showing the detail of a Monstera leaf stem with a new sprout emerging." class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOBEWwa3NwCmJgDvvdzFekyg3epN6eCybvl_E2F2NcK4rKaeGFX0bnkBa62-HQfAOmvW6gtNTPu38VAnb6D6teTayM6nS2JR3e9V6t0C2NYKURmRQEWNgBfsBPlI51Bbtk8UEZoVxiRh6lBB3U5vueT2q33xNC2g6olQ38mnV0rx3860LyA3nKJ2lzFd2fwixtTUIb0EPK87fefoemZPI-gbODXOYsoG65J-GDZ2idbJJF9j3_ldDu">
 </div>
 </div>
 </div>
@@ -353,7 +368,7 @@
                                         몬티를 동향 창가로 옮겨 더 많은 아침 햇살을 받게 했습니다. 새로운 잎에 더 많은 구멍(찢잎)이 생기길 기대합니다.
                                     </p>
 <div class="rounded-lg overflow-hidden h-48 w-full">
-<img class="w-full h-full object-cover" data-alt="A wide shot of a minimalist living room featuring a large Monstera plant in a sunny corner." src="https://lh3.googleusercontent.com/aida-public/AB6AXuATkB7Ia5NQb2C8jWUQN_I0_6ONtyg2Z4LX7RTJ1oPQYUEqrhMX4uOGoDT6vLDHcr3fdKF6sYi5dNk_ErvCqPCqJBt0JP17I9vvR9zWyQSC5aPonom1r4vf0o3jWCw1eQYqMFTB_vO6iA0VHLZaL7qxCUsS3mzm3Kh1Ks9hDR5eMrCAqCjD1pEK9P5_1Vh0w_qIiHh-IUDyv_wOMl3yWBMtCOpXq7An-zLth3RXuWnrgPWYP4aBVvAm"/>
+<img alt="A wide shot of a minimalist living room featuring a large Monstera plant in a sunny corner." class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuATkB7Ia5NQb2C8jWUQN_I0_6ONtyg2Z4LX7RTJ1oPQYUEqrhMX4uOGoDT6vLDHcr3fdKF6sYi5dNk_ErvCqPCqJBt0JP17I9vvR9zWyQSC5aPonom1r4vf0o3jWCw1eQYqMFTB_vO6iA0VHLZaL7qxCUsS3mzm3Kh1Ks9hDR5eMrCAqCjD1pEK9P5_1Vh0w_qIiHh-IUDyv_wOMl3yWBMtCOpXq7An-zLth3RXuWnrgPWYP4aBVvAm">
 </div>
 </div>
 </div>
@@ -422,4 +437,8 @@
         });
     });
 </script>
+
+
+
+
 </body></html>

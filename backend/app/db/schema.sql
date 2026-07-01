@@ -70,9 +70,9 @@ IF NOT EXISTS vector;
             session_id UUID NOT NULL REFERENCES public.chat_sessions(id) ON
             DELETE
                 CASCADE,
-                sender TEXT NOT NULL CHECK (sender IN ('user',
-                                                       'assistant')),
-                content TEXT NOT NULL                               ,
+                role TEXT NOT NULL CHECK (role IN ('user',
+                                                   'assistant')),
+                content JSONB NOT NULL                              ,
                 citations JSONB DEFAULT '[]'::jsonb                 , -- 출처 메타데이터 리스트
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL );
     -- 7.5. plant_catalog (식물 품종 도감 테이블)
@@ -88,22 +88,24 @@ IF NOT EXISTS vector;
     -- 8. rag_sources (RAG용 공식 문서 출처 테이블)
     CREATE TABLE IF NOT EXISTS public.rag_sources
         (
-            id         TEXT PRIMARY KEY, -- 예: 'RAG-DOC-001'
-            title      TEXT NOT NULL   ,
-            url        TEXT            ,
-            publisher  TEXT            ,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+            source_id    UUID PRIMARY KEY,
+            title        TEXT NOT NULL   ,
+            url          TEXT            ,
+            publisher    TEXT            ,
+            collected_at TIMESTAMP WITH TIME ZONE,
+            created_at   TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
         )
     ;
     -- 9. rag_chunks (검색 가능한 문서 chunk와 embedding 테이블)
     CREATE TABLE IF NOT EXISTS public.rag_chunks
         (
-            id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            source_id TEXT NOT NULL REFERENCES public.rag_sources(id) ON
+            chunk_id UUID PRIMARY KEY,
+            source_id UUID NOT NULL REFERENCES public.rag_sources(source_id) ON
             DELETE
                 CASCADE                           ,
-                content TEXT NOT NULL             ,
+                text TEXT NOT NULL                ,
                 embedding VECTOR(1536)            , -- OpenAI Embedding 차원(1536) 기준
+                symptom_keywords TEXT[] DEFAULT ARRAY[]::TEXT[],
                 metadata JSONB DEFAULT '{}'::jsonb,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL );
     -- 10. 벡터 인덱스 생성 (HNSW 인덱스를 사용하여 유사도 검색 속도 향상)
@@ -135,8 +137,8 @@ IF NOT EXISTS vector;
     BEGIN
       RETURN QUERY
       SELECT
-        rag_chunks.id,
-        rag_chunks.source_id,
+        rag_chunks.chunk_id AS id,
+        rag_chunks.source_id::text AS source_id,
         rag_sources.title,
         rag_sources.url,
         rag_sources.publisher,

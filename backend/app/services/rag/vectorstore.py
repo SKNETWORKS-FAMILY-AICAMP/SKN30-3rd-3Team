@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 from app.db import session
+from app.core.config import settings
 
 # 프로젝트 루트 경로 (Fallback 파일 조회용)
 backend_dir = Path(__file__).resolve().parents[4]
@@ -14,6 +15,77 @@ class SearchResult:
         self.content = content
         self.metadata = metadata
         self.score = score
+
+def normalize_metadata(item: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    nested_source = item.get("rag_sources") if isinstance(item.get("rag_sources"), dict) else {}
+    return {
+        "source_id": item.get("source_id") or metadata.get("sourceId") or metadata.get("source_id") or "",
+        "title": item.get("title") or metadata.get("title") or nested_source.get("title") or "출처 미상",
+        "url": item.get("url") or metadata.get("url") or nested_source.get("url"),
+        "publisher": item.get("publisher") or metadata.get("publisher") or nested_source.get("publisher")
+    }
+
+def score_text(query_tokens: List[str], text: str, keywords: List[str]) -> float:
+    score = 0.0
+    lower_text = text.lower()
+    lower_keywords = [str(keyword).lower() for keyword in keywords]
+    for token in query_tokens:
+        token_lower = token.lower()
+        if not token_lower:
+            continue
+        if token_lower in lower_text:
+            score += 1.0
+        for keyword in lower_keywords:
+            if token_lower in keyword or keyword in token_lower:
+                score += 2.0
+    return score
+
+def supabase_keyword_search(query: str, top_k: int = 3) -> List[SearchResult]:
+    """
+    pgvector RPC가 없거나 스키마 버전 차이로 실패하는 환경에서 Supabase RAG 테이블을 직접 읽는 fallback입니다.
+    데이터팀 최신 스키마인 rag_chunks.text / symptom_keywords / metadata를 우선 사용합니다.
+    """
+    clean_query = query.replace(",", " ").replace("?", " ").replace(".", " ")
+    query_tokens = [token.strip() for token in clean_query.split() if len(token.strip()) > 1]
+    if not query_tokens:
+        return []
+
+    try:
+        response = (
+            session.supabase
+            .table("rag_chunks")
+            .select("chunk_id,source_id,text,symptom_keywords,metadata,rag_sources(title,url,publisher)")
+            .limit(500)
+            .execute()
+        )
+    except Exception:
+        try:
+            response = (
+                session.supabase
+                .table("rag_chunks")
+                .select("id,source_id,content,metadata,rag_sources(title,url,publisher)")
+                .limit(500)
+                .execute()
+            )
+        except Exception as exc:
+            print(f"[RAG SEARCH WARNING] Supabase keyword fallback 조회 실패: {exc}")
+            return []
+
+    results = []
+    for item in response.data or []:
+        content = item.get("text") or item.get("content") or ""
+        if not content:
+            continue
+        keywords = item.get("symptom_keywords") or []
+        if not isinstance(keywords, list):
+            keywords = [str(keywords)]
+        score = score_text(query_tokens, content, keywords)
+        if score > 0:
+            results.append(SearchResult(content=content, metadata=normalize_metadata(item), score=score))
+
+    results.sort(key=lambda result: result.score, reverse=True)
+    return results[:top_k]
 
 def fallback_keyword_search(query: str, top_k: int = 3) -> List[SearchResult]:
     """
@@ -61,7 +133,7 @@ def search_documents(query: str, top_k: int = 3) -> List[SearchResult]:
     1순위: OpenAI Embedding + Supabase pgvector RPC 호출
     2순위: 텍스트 기반 로컬 키워드 매칭 Fallback 엔진
     """
-    openai_key = os.getenv("OPENAI_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY
     
     if openai_key:
         try:
@@ -80,27 +152,28 @@ def search_documents(query: str, top_k: int = 3) -> List[SearchResult]:
                 "match_rag_chunks",
                 {
                     "query_embedding": query_vector,
-                    "match_threshold": 0.3,
+                    "match_threshold": 0.2,
                     "match_count": top_k
                 }
             ).execute()
             
             results = []
-            for item in response.data:
-                metadata = {
-                    "source_id": item["source_id"],
-                    "title": item["title"],
-                    "url": item.get("url"),
-                    "publisher": item.get("publisher")
-                }
+            for item in response.data or []:
+                content = item.get("content") or item.get("text") or ""
+                if not content:
+                    continue
+                metadata = normalize_metadata(item)
                 results.append(SearchResult(
-                    content=item["content"],
+                    content=content,
                     metadata=metadata,
-                    score=float(item["similarity"])
+                    score=float(item.get("similarity") or item.get("score") or 0.0)
                 ))
-            return results
+            if results:
+                return results
         except Exception as e:
-            print(f"[RAG SEARCH WARNING] Supabase pgvector RPC 검색 중 오류 발생, Fallback 우회: {e}")
-            return fallback_keyword_search(query, top_k)
-    else:
-        return fallback_keyword_search(query, top_k)
+            print(f"[RAG SEARCH WARNING] Supabase pgvector RPC 검색 중 오류 발생, Supabase keyword fallback 전환: {e}")
+
+    supabase_results = supabase_keyword_search(query, top_k)
+    if supabase_results:
+        return supabase_results
+    return fallback_keyword_search(query, top_k)

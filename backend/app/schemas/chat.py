@@ -22,6 +22,8 @@ class PlantCareChatResponse(BaseModel):
     observationChecklist: List[str] = Field(..., description="향후 추가적으로 관찰해야 할 포인트 리스트")
     citations: List[Citation] = Field(..., description="상담 답변의 근거가 된 공식 원예 자료 출처 목록")
     safetyNotice: Optional[str] = Field(None, description="확정 진단 불가 및 주의 사항 등 안전성 공지 문구")
+    sessionId: Optional[UUID] = Field(None, description="저장된 상담 세션 UUID")
+    messageId: Optional[UUID] = Field(None, description="저장된 assistant 메시지 UUID")
 
 class ChatSession(BaseModel):
     id: UUID

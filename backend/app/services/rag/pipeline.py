@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional, TypedDict
 from datetime import datetime, date, timezone
 from supabase import Client
 
+from app.core.config import settings
 from app.services.rag.vectorstore import search_documents
 from langgraph.graph import StateGraph, END
 
@@ -20,6 +21,7 @@ class AgentState(TypedDict):
     plant_data: Dict[str, Any]
     care_logs: List[Dict[str, Any]]
     photo_data: Dict[str, Any]
+    recent_photos: List[Dict[str, Any]]
     
     # 노드 결과물
     image_signals: List[str]
@@ -41,24 +43,41 @@ def validate_input(state: AgentState) -> Dict[str, Any]:
     if not plant_response.data:
         raise ValueError("식물을 찾을 수 없거나 해당 식물에 대한 접근 권한이 없습니다.")
     
-    # 이력 데이터 조회
-    logs_res = db.table("care_logs").select("*").eq("plant_id", plant_id).order("created_at", desc=True).limit(3).execute()
+    if state.get("care_log_id"):
+        selected_log_res = (
+            db.table("care_logs")
+            .select("*")
+            .eq("id", state["care_log_id"])
+            .eq("plant_id", plant_id)
+            .execute()
+        )
+        if not selected_log_res.data:
+            raise ValueError("재배 일지를 찾을 수 없거나 해당 식물에 대한 접근 권한이 없습니다.")
+        logs = selected_log_res.data
+    else:
+        logs_res = db.table("care_logs").select("*").eq("plant_id", plant_id).order("created_at", desc=True).limit(5).execute()
+        logs = logs_res.data or []
     
     photo_data = {}
     if state.get("photo_id"):
         photo_res = db.table("plant_photos").select("*").eq("id", state["photo_id"]).eq("plant_id", plant_id).execute()
         if photo_res.data:
             photo_data = photo_res.data[0]
-            
+
+    recent_photos_res = db.table("plant_photos").select("*").eq("plant_id", plant_id).order("created_at", desc=True).limit(5).execute()
+
     return {
         "plant_data": plant_response.data[0],
-        "care_logs": logs_res.data or [],
-        "photo_data": photo_data
+        "care_logs": logs,
+        "photo_data": photo_data,
+        "recent_photos": recent_photos_res.data or []
     }
 
 # 2. extract_image_signals 노드
 def extract_image_signals(state: AgentState) -> Dict[str, Any]:
     photo = state.get("photo_data")
+    recent_photos = state.get("recent_photos") or []
+    logs = state.get("care_logs") or []
     question = state["question"].lower()
     signals = []
     
@@ -73,6 +92,17 @@ def extract_image_signals(state: AgentState) -> Dict[str, Any]:
     # 이미지 설명이 있으면 추가
     if photo and photo.get("note"):
         signals.append(f"사용자 사진 메모: {photo['note']}")
+
+    for item in recent_photos[:3]:
+        note = item.get("note")
+        if note and (not photo or item.get("id") != photo.get("id")):
+            signals.append(f"최근 사진 메모: {note}")
+
+    for log in logs[:3]:
+        for label, field in [("잎 상태", "leaf_condition"), ("흙 상태", "soil_condition"), ("재배 메모", "memo")]:
+            value = log.get(field)
+            if value:
+                signals.append(f"최근 {label}: {value}")
         
     return {"image_signals": signals}
 
@@ -80,19 +110,42 @@ def extract_image_signals(state: AgentState) -> Dict[str, Any]:
 def summarize_user_context(state: AgentState) -> Dict[str, Any]:
     plant = state["plant_data"]
     logs = state["care_logs"]
+    photo = state.get("photo_data") or {}
+    recent_photos = state.get("recent_photos") or []
     
     context_parts = [
-        f"식물 별명: {plant['name']}",
+        f"식물 별명: {plant.get('name') or '알 수 없음'}",
         f"식물 품종: {plant.get('species') or '알 수 없음'}",
         f"키우는 위치: {plant.get('location') or '미지정'}",
         f"조도/햇빛: {plant.get('sunlight') or '미지정'}"
     ]
+
+    if plant.get("health_score") is not None:
+        context_parts.append(f"앱 건강 점수: {plant.get('health_score')}")
+    if plant.get("moisture"):
+        context_parts.append(f"앱 수분 상태: {plant.get('moisture')}")
+    if plant.get("next_task"):
+        context_parts.append(f"다음 관리 작업: {plant.get('next_task')}")
     
     if logs:
-        last_watered = logs[0].get("watered_at") or "기록 없음"
-        context_parts.append(f"최근 물 준 날짜: {last_watered}")
-        context_parts.append(f"최근 잎 상태: {logs[0].get('leaf_condition') or '기록 없음'}")
-        context_parts.append(f"최근 흙 상태: {logs[0].get('soil_condition') or '기록 없음'}")
+        for index, log in enumerate(logs[:3], start=1):
+            log_parts = [
+                f"#{index}",
+                f"물 준 날짜={log.get('watered_at') or '기록 없음'}",
+                f"잎={log.get('leaf_condition') or '기록 없음'}",
+                f"흙={log.get('soil_condition') or '기록 없음'}",
+                f"메모={log.get('memo') or '없음'}"
+            ]
+            context_parts.append("최근 재배 일지 " + ", ".join(log_parts))
+
+    if photo:
+        context_parts.append(
+            f"상담 첨부 사진: 촬영일={photo.get('captured_at') or '미지정'}, 메모={photo.get('note') or '없음'}, 저장경로={photo.get('storage_path') or '없음'}"
+        )
+    elif recent_photos:
+        photo_notes = [item.get("note") for item in recent_photos[:3] if item.get("note")]
+        if photo_notes:
+            context_parts.append("최근 사진 메모: " + " / ".join(photo_notes))
         
     return {"user_context": " / ".join(context_parts)}
 
@@ -101,14 +154,20 @@ def build_retrieval_query(state: AgentState) -> Dict[str, Any]:
     plant = state["plant_data"]
     question = state["question"]
     signals = ", ".join(state["image_signals"])
+    context = state.get("user_context", "")
     
-    query_text = f"식물: {plant.get('species') or plant['name']}. 증상: {question}. 관찰 징후: {signals}"
+    query_text = (
+        f"식물: {plant.get('species') or plant.get('name')}. "
+        f"사용자 질문: {question}. "
+        f"관찰 징후: {signals}. "
+        f"관리 맥락: {context}"
+    )
     return {"search_query": query_text}
 
 # 5. retrieve_docs 노드
 def retrieve_docs(state: AgentState) -> Dict[str, Any]:
     query = state["search_query"]
-    search_results = search_documents(query, top_k=2)
+    search_results = search_documents(query, top_k=4)
     
     docs = []
     for res in search_results:
@@ -126,109 +185,168 @@ def grade_or_rerank(state: AgentState) -> Dict[str, Any]:
 
 # 7. generate_answer 노드
 def generate_answer(state: AgentState) -> Dict[str, Any]:
-    openai_key = os.getenv("OPENAI_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY
     docs = state["retrieved_docs"]
     question = state["question"]
     context = state["user_context"]
     
     citations = []
+    seen_sources = set()
     for doc in docs:
+        metadata = doc.get("metadata") or {}
+        source_id = metadata.get("source_id") or metadata.get("sourceId") or "unknown"
+        if source_id in seen_sources:
+            continue
+        seen_sources.add(source_id)
         citations.append({
-            "sourceId": doc["metadata"]["source_id"],
-            "title": doc["metadata"]["title"],
-            "url": doc["metadata"]["url"],
-            "publisher": doc["metadata"]["publisher"]
+            "sourceId": source_id,
+            "title": metadata.get("title") or "출처 미상",
+            "url": metadata.get("url"),
+            "publisher": metadata.get("publisher")
         })
         
     if openai_key:
         try:
-            from langchain_openai import ChatOpenAI
-            from langchain_core.prompts import ChatPromptTemplate
             import json
+            from openai import OpenAI
             
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", 
-                 "당신은 전문 식물 주치의입니다. 아래 제공된 [식물 정보]와 [공식 가이드 문서]들을 기반으로 사용자의 질문에 답변을 생성해야 합니다.\n"
-                 "답변은 반드시 아래 지정을 준수한 JSON 포맷이어야 합니다.\n\n"
-                 "출력 JSON 스펙:\n"
-                 "{{\n"
-                 "  \"summary\": \"식물의 현재 상태 및 증상 요약\",\n"
-                 "  \"possibleCauses\": [\"의심 원인 1\", \"의심 원인 2\"],\n"
-                 "  \"todayActions\": [\"오늘 할 일 1\", \"오늘 할 일 2\"],\n"
-                 "  \"observationChecklist\": [\"앞으로 관찰할 항목 1\", \"관찰할 항목 2\"]\n"
-                 "}}\n\n"
-                 "주의사항:\n"
-                 "- 질병명 등을 확정하지 말고 '의심됩니다' 혹은 '~가능성이 있습니다' 등으로 표현하세요.\n"
-                 "- 농약 정보 언급 시에는 안전사용기준 준수 및 전문가 상담 요망을 함께 작성하세요.\n\n"
-                 "[식물 정보]\n{context}\n\n"
-                 "[공식 가이드 문서]\n{docs_text}"),
-                ("human", "{question}")
+            docs_text = "\n\n".join([
+                f"--- 문서: {(d.get('metadata') or {}).get('title') or '출처 미상'} ---\n{d.get('content') or ''}"
+                for d in docs
             ])
-            
-            docs_text = "\n\n".join([f"--- 문서: {d['metadata']['title']} ---\n{d['content']}" for d in docs])
-            chain = prompt | llm
-            res = chain.invoke({"context": context, "docs_text": docs_text, "question": question})
-            
-            ans = json.loads(res.content)
+
+            client = OpenAI(api_key=openai_key)
+            res = client.chat.completions.create(
+                model=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "당신은 식물 관리 상담을 돕는 AI입니다. 반드시 사용자의 식물 정보, 최근 관리 기록, 검색된 공식 문서만 근거로 답하세요. "
+                            "모든 답변은 JSON 객체만 출력합니다. "
+                            "필드: summary(string), possibleCauses(string[]), todayActions(string[]), observationChecklist(string[]). "
+                            "질병명 확정, 농약 직접 처방, 과도한 단정은 피하고 '~가능성', '관찰 필요' 중심으로 말하세요. "
+                            "검색 문서가 부족하면 부족하다고 말하고 추가 사진/물주기/빛/흙 상태 정보를 요청하세요."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"[식물 정보]\n{context}\n\n"
+                            f"[검색된 공식 문서]\n{docs_text or '검색 문서 없음'}\n\n"
+                            f"[사용자 질문]\n{question}"
+                        )
+                    }
+                ]
+            )
+
+            raw_content = str(res.choices[0].message.content or "").strip()
+            if raw_content.startswith("```"):
+                raw_content = raw_content.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            ans = json.loads(raw_content)
             return {
                 "draft_answer": {
-                    "summary": ans["summary"],
-                    "possibleCauses": ans["possibleCauses"],
-                    "todayActions": ans["todayActions"],
-                    "observationChecklist": ans["observationChecklist"],
+                    "summary": ans.get("summary") or "입력된 식물 상태와 공식 자료를 바탕으로 관리 가이드를 정리했습니다.",
+                    "possibleCauses": ans.get("possibleCauses") or ["입력 정보만으로 확정하기 어려워 추가 관찰이 필요합니다."],
+                    "todayActions": ans.get("todayActions") or ["흙 수분, 빛, 통풍 상태를 먼저 확인합니다."],
+                    "observationChecklist": ans.get("observationChecklist") or ["잎 색 변화, 줄기 무름, 흙 냄새를 3~7일간 관찰합니다."],
                     "citations": citations
                 }
             }
         except Exception as e:
             print(f"[RAG LLM WARNING] OpenAI 답변 생성 중 실패, 룰베이스 전환: {e}")
             
-    # Fallback 규칙 기반 템플릿 답변
-    summary = "식물 관리 상태 분석 및 보완 가이드 제공"
-    possible_causes = ["일시적인 실내 환경 적응 반응", "배수 상태 저하로 인한 산소 부족 의심"]
-    today_actions = ["밝고 바람이 통하는 곳으로 식물을 이동시킵니다."]
-    checklist = ["앞으로 7일 동안 잎의 생기와 무름 상태를 매일 관찰합니다."]
-    
-    combined_docs_text = "".join([d["content"] for d in docs])
-    
-    if "과습" in combined_docs_text or "물주기" in combined_docs_text:
-        summary = "과습으로 인한 뿌리 산소 호흡 장애 및 잎 무름 의심"
+    combined_docs_text = " ".join([d.get("content", "") for d in docs])
+    combined_signal_text = f"{question} {context} {combined_docs_text}".lower()
+
+    if not docs:
+        summary = "현재 질문과 식물 기록만으로는 공식 문서 근거가 충분하지 않아 확정적인 판단은 어렵습니다."
+        possible_causes = [
+            "최근 물주기, 빛, 통풍, 흙 상태 정보가 부족합니다.",
+            "사진이나 재배 일지 없이 증상만으로는 원인 후보를 좁히기 어렵습니다."
+        ]
+        today_actions = [
+            "잎 앞뒤, 줄기 밑동, 흙 표면 사진을 추가로 기록합니다.",
+            "최근 물 준 날짜와 흙이 마르는 속도를 재배 일지에 남깁니다."
+        ]
+        checklist = [
+            "잎 색 변화가 새잎까지 번지는지 확인합니다.",
+            "줄기 밑동이 무르거나 흙 냄새가 나는지 확인합니다."
+        ]
+    elif any(token in combined_signal_text for token in ["과습", "물주기", "젖", "축축", "무름", "뿌리"]):
+        summary = "입력된 증상과 검색 문서를 보면 과습 또는 배수 불량 가능성을 우선 점검해야 합니다."
         possible_causes = [
             "배수가 잘 되지 않거나 흙이 마르기 전 잦은 관수",
             "화분 물받이에 고여있는 정체수"
         ]
         today_actions = [
             "화분 밑 물받이에 고인 물을 완전히 비워줍니다.",
-            "손가락 두 마디 깊이까지 흙이 완전히 말랐는지 확인한 후에만 다음 물을 줍니다."
+            "손가락 두 마디 깊이까지 흙이 말랐는지 확인하고, 젖어 있으면 물주기를 미룹니다."
         ]
         checklist = [
-            "새로 나오는 새싹이나 안쪽 줄기가 무르고 갈색으로 썩어 들어가는지 매일 관찰하십시오."
+            "새싹이나 안쪽 줄기가 무르거나 갈색으로 변하는지 3~7일간 관찰합니다.",
+            "흙 냄새가 시큼하거나 곰팡이 냄새가 나는지 확인합니다."
         ]
-    elif "양분" in combined_docs_text or "질소" in combined_docs_text:
-        summary = "토양 영양소(특히 질소 성분) 결핍으로 인한 생리장해 의심"
+    elif any(token in combined_signal_text for token in ["노랗", "황화", "색이", "하엽", "영양", "질소", "비료"]):
+        summary = "잎 황화가 보인다면 과습, 광량 변화, 영양 부족 가능성을 함께 비교해야 합니다."
         possible_causes = [
-            "6개월 이상의 장기 재배로 인한 토양 미네랄 및 영양 고갈",
-            "잘못된 비율의 분갈이 흙 배합"
+            "오래된 하엽부터 노랗게 변하는 자연 노화 또는 영양 부족",
+            "젖은 흙이 오래 유지되어 뿌리 기능이 떨어진 상태",
+            "갑작스러운 빛 환경 변화"
         ]
         today_actions = [
-            "물주기 시 적용 가능한 액체 비료를 매우 정밀하게 권장 배율로 희석하여 공급하십시오.",
-            "가능하다면 새 흙으로 분갈이를 준비해 주십시오."
+            "새잎과 오래된 잎 중 어디부터 노랗게 변하는지 구분해 기록합니다.",
+            "흙 수분을 먼저 확인하고, 젖어 있으면 비료보다 건조와 통풍을 우선합니다."
         ]
         checklist = [
-            "비료 살포 후 아랫 잎 외에 윗 부분 잎의 녹색도가 돌아오는지 모니터링하십시오."
+            "노란 부위가 잎맥 사이인지, 잎 가장자리인지, 전체 잎인지 관찰합니다.",
+            "다음 물주기 전까지 황화 범위가 넓어지는지 확인합니다."
         ]
-    elif "건조" in combined_docs_text or "잎 끝" in combined_docs_text:
-        summary = "극심한 실내 건조로 인한 잎끝 탈수 현상 의심"
+    elif any(token in combined_signal_text for token in ["건조", "마름", "잎 끝", "갈변", "바삭", "습도"]):
+        summary = "잎끝 마름이나 갈변은 건조, 강한 빛, 물 부족 스트레스 가능성이 있습니다."
         possible_causes = [
             "난방기구 주변이나 바람이 직접 닿아 일어난 습도 저하",
-            "낮은 상대 습도 (40% 이하)"
+            "흙 하부까지 충분히 젖지 않는 얕은 관수",
+            "강한 직사광선 또는 급격한 위치 변화"
         ]
         today_actions = [
-            "가습기를 가동하거나 식물 주변 잎에 가벼운 공중 분무를 주 2~3회 수행하십시오.",
-            "난방기나 온풍기의 열기 배출구로부터 멀리 이동하십시오."
+            "화분 무게와 흙 속 수분을 확인한 뒤 말랐다면 배수구로 물이 빠질 만큼 충분히 관수합니다.",
+            "난방기, 에어컨, 강한 직사광선 위치에서 한 발 떨어뜨립니다."
         ]
         checklist = [
-            "잎 끝 마름 현상이 더 이상 잎 안쪽 안면부로 번지지 않고 멈추는지 관찰하십시오."
+            "잎끝 마름이 멈추는지, 새잎에도 반복되는지 관찰합니다.",
+            "실내 습도가 40% 이하로 오래 유지되는지 확인합니다."
+        ]
+    elif any(token in combined_signal_text for token in ["벌레", "응애", "깍지", "진딧", "반점", "해충"]):
+        summary = "반점이나 해충 흔적이 있다면 병해충 가능성을 배제하지 말고 잎 뒷면을 확인해야 합니다."
+        possible_causes = [
+            "잎 뒷면이나 줄기 마디에 붙은 소형 해충",
+            "통풍 부족과 과습이 겹친 반점성 이상",
+            "물방울 또는 강한 빛에 의한 국소 손상"
+        ]
+        today_actions = [
+            "잎 뒷면, 줄기 마디, 새순 주변을 확대해서 확인하고 사진으로 남깁니다.",
+            "해당 식물을 다른 식물과 잠시 떨어뜨려 관찰합니다."
+        ]
+        checklist = [
+            "흰 가루, 거미줄, 끈적임, 작은 점이 움직이는지 확인합니다.",
+            "반점이 원형으로 커지거나 주변 잎으로 번지는지 관찰합니다."
+        ]
+    else:
+        summary = "검색된 공식 자료와 식물 기록을 기준으로 기본 관리 상태를 점검해야 합니다."
+        possible_causes = [
+            "물주기, 광량, 통풍 중 하나가 현재 식물 조건과 맞지 않을 가능성",
+            "최근 위치 변경이나 계절 변화에 따른 일시적 적응 반응"
+        ]
+        today_actions = [
+            "흙 수분, 빛이 닿는 시간, 통풍 상태를 오늘 기준으로 기록합니다.",
+            "증상이 보이는 잎과 정상 잎을 함께 촬영해 비교 기록을 남깁니다."
+        ]
+        checklist = [
+            "3~7일 동안 증상이 새잎으로 확산되는지 확인합니다.",
+            "물주기 후 회복되는지 또는 더 처지는지 관찰합니다."
         ]
         
     return {
@@ -286,13 +404,23 @@ def persist_result(state: AgentState) -> Dict[str, Any]:
         session_id = new_session["id"]
         
     user_msg_id = str(uuid.uuid4())
-    db.table("chat_messages").insert({
+    user_message_payload = {
         "id": user_msg_id,
         "session_id": session_id,
         "role": "user",
         "content": {"text": question},
         "citations": []
-    }).execute()
+    }
+    try:
+        db.table("chat_messages").insert(user_message_payload).execute()
+    except Exception:
+        db.table("chat_messages").insert({
+            "id": user_msg_id,
+            "session_id": session_id,
+            "sender": "user",
+            "content": question,
+            "citations": []
+        }).execute()
     
     ai_msg_id = str(uuid.uuid4())
     content_text = f"[요약]\n{final['summary']}\n\n[의심 원인]\n" + "\n".join(final['possibleCauses']) + "\n\n[오늘 할 일]\n" + "\n".join(final['todayActions'])
@@ -306,13 +434,23 @@ def persist_result(state: AgentState) -> Dict[str, Any]:
             "publisher": cit["publisher"]
         })
         
-    db.table("chat_messages").insert({
+    assistant_message_payload = {
         "id": ai_msg_id,
         "session_id": session_id,
         "role": "assistant",
         "content": {"text": content_text},
         "citations": db_citations
-    }).execute()
+    }
+    try:
+        db.table("chat_messages").insert(assistant_message_payload).execute()
+    except Exception:
+        db.table("chat_messages").insert({
+            "id": ai_msg_id,
+            "session_id": session_id,
+            "sender": "assistant",
+            "content": content_text,
+            "citations": db_citations
+        }).execute()
     
     return {
         "session_id": session_id,
@@ -362,4 +500,7 @@ def run_rag_workflow(
     }
     
     result = app.invoke(initial_state)
-    return result["final_answer"]
+    final_answer = dict(result["final_answer"])
+    final_answer["sessionId"] = result.get("session_id")
+    final_answer["messageId"] = result.get("message_id")
+    return final_answer

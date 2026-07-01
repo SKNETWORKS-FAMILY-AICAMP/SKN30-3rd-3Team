@@ -44,7 +44,9 @@ async def consult_plant_care(
             todayActions=final_answer["todayActions"],
             observationChecklist=final_answer["observationChecklist"],
             citations=citations,
-            safetyNotice=final_answer.get("safetyNotice")
+            safetyNotice=final_answer.get("safetyNotice"),
+            sessionId=uuid.UUID(final_answer["sessionId"]) if final_answer.get("sessionId") else None,
+            messageId=uuid.UUID(final_answer["messageId"]) if final_answer.get("messageId") else None
         )
     except ValueError as e:
         raise HTTPException(
