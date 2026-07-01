@@ -393,6 +393,34 @@ def build_image_notes(row: dict[str, Any]) -> list[str]:
     return notes
 
 
+def build_image_refs(row: dict[str, Any]) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    for key, image_type in [
+        ("virusImgList", "pathogen"),
+        ("spcsPhotoData", "species"),
+        ("imageList", "damage"),
+    ]:
+        value = row.get(key)
+        if not isinstance(value, dict):
+            continue
+        urls = as_list(value.get("image"))
+        titles = as_list(value.get("imageTitle"))
+        checks = as_list(value.get("iemSpchcknNm"))
+        for index, url in enumerate(urls):
+            image_url = stringify(url)
+            if not image_url:
+                continue
+            refs.append(
+                {
+                    "type": image_type,
+                    "url": image_url,
+                    "title": stringify(titles[index]) if index < len(titles) else "",
+                    "label": stringify(checks[index]) if index < len(checks) else "",
+                }
+            )
+    return refs
+
+
 def public_url(endpoint_url: str, params: dict[str, Any]) -> str:
     public_params = {key: value for key, value in params.items() if key != "apiKey"}
     if not public_params:
@@ -432,7 +460,7 @@ def normalize_disease_detail_record(
         ("병원체 특징", field(row, "sfeNm")),
     ]
     text_parts = [f"{label}: {value}" for label, value in sections if value]
-    text_parts.extend(build_image_notes(row))
+    image_refs = build_image_refs(row)
     text = normalize_text("\n".join(text_parts))
 
     tags = list(source.get("safety_tags", []))
@@ -469,6 +497,7 @@ def normalize_disease_detail_record(
         "crop_or_plant": [value for value in [crop_name] if value],
         "collected_at": now_iso(),
         "raw_record": raw_record,
+        "image_refs": image_refs,
         "text": text,
     }
 
@@ -505,7 +534,7 @@ def normalize_insect_detail_record(
         ("천적곤충 과명", field(row, "enemyInsectFamily")),
     ]
     text_parts = [f"{label}: {value}" for label, value in sections if value]
-    text_parts.extend(build_image_notes(row))
+    image_refs = build_image_refs(row)
     text = normalize_text("\n".join(text_parts))
 
     tags = list(source.get("safety_tags", []))
@@ -543,6 +572,7 @@ def normalize_insect_detail_record(
         "crop_or_plant": [value for value in [crop_name] if value],
         "collected_at": now_iso(),
         "raw_record": raw_record,
+        "image_refs": image_refs,
         "text": text,
     }
 
@@ -578,7 +608,7 @@ def normalize_consult_detail_record(
         ("방제법", field(row, "prvnbeMth")),
     ]
     text_parts = [f"{label}: {value}" for label, value in sections if value]
-    text_parts.extend(build_image_notes(row))
+    image_refs = build_image_refs(row)
     text = normalize_text("\n".join(text_parts))
 
     tags = list(source.get("safety_tags", []))
@@ -612,6 +642,7 @@ def normalize_consult_detail_record(
         "crop_or_plant": [value for value in [crop_name] if value],
         "collected_at": now_iso(),
         "raw_record": raw_record,
+        "image_refs": image_refs,
         "text": text,
     }
 

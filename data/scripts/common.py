@@ -30,6 +30,70 @@ DEFAULT_HEADERS = {
 SOURCE_UUID_NAMESPACE = uuid.UUID("4a8ecf91-111c-4f56-a965-f3f3f0d9d9b1")
 CHUNK_UUID_NAMESPACE = uuid.UUID("70d3a994-55e0-4e58-8477-f128e1cbf65f")
 
+KNOWN_CROP_OR_PLANT_NAMES = [
+    "몬스테라",
+    "스파티필럼",
+    "호접란",
+    "금전수",
+    "스투키",
+    "선인장",
+    "테이블야자",
+    "홍콩야자",
+    "보스턴고사리",
+    "관음죽",
+    "벵갈고무나무",
+    "디펜바키아",
+    "올리브나무",
+    "오렌지쟈스민",
+    "구문초",
+    "구즈마니아",
+    "공작야자",
+    "개운죽",
+    "가울테리아",
+    "골드크레스트",
+    "토마토",
+    "고추",
+    "상추",
+    "배추",
+    "양배추",
+    "파프리카",
+    "감자",
+    "고구마",
+    "오이",
+    "딸기",
+    "가지",
+    "복숭아",
+    "옥수수",
+    "벼",
+    "난",
+]
+
+WEB_BOILERPLATE_PHRASES = [
+    "본문 바로가기",
+    "주메뉴 바로가기",
+    "이 누리집은 대한민국 공식 전자정부 누리집입니다.",
+    "화면크기",
+    "작게 보통 조금 크게 크게 가장크게 초기화",
+    "농업자재 영농기술 농업경영 연구정보 생활농업 농(農)영상 농사로소식 농업정보토탈서비스 농사로 활용가이드 농업자재",
+    "통합검색",
+    "내용삭제",
+    "검색 첫단어 중간단어 끝단어",
+    "첫단어 중간단어 끝단어",
+    "전체메뉴",
+    "전체메뉴 닫기",
+    "홈 인쇄 공유",
+    "X로 공유하기",
+    "페이스북으로 공유하기",
+    "카카오톡으로 공유하기",
+    "밴드로 공유하기",
+    "블로그로 공유하기",
+    "URL 복사",
+    "PDF 다운",
+    "작성자 비밀번호 의견제시 등록",
+    "이 페이지에서 제공하는 정보에 대해 만족하십니까?",
+    "등록하기",
+]
+
 
 class TextExtractor(HTMLParser):
     def __init__(self) -> None:
@@ -129,6 +193,9 @@ def write_csv(path: Path, rows: Iterable[dict[str, Any]], fieldnames: list[str])
 def normalize_text(value: str) -> str:
     value = html.unescape(value)
     value = unicodedata.normalize("NFKC", value)
+    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
+    value = re.sub(r"</(?:p|div|li|tr|h[1-6])>", "\n", value, flags=re.IGNORECASE)
+    value = re.sub(r"<[^>]+>", " ", value)
     value = re.sub(r"[ \t\r\f\v]+", " ", value)
     value = re.sub(r"\n\s*\n+", "\n", value)
     return value.strip()
@@ -138,6 +205,56 @@ def html_to_text(raw_html: str) -> str:
     parser = TextExtractor()
     parser.feed(raw_html)
     return parser.text()
+
+
+def clean_scraped_text(text: str, source_key: str | None = None, title: str | None = None) -> str:
+    text = normalize_text(text)
+    text = re.sub(r"\bhttps?://\S+", " ", text)
+    text = re.sub(r"(?:병원체|곤충|해충|병피해|피해|상담)\s*사진\s*:\s*image\s*:", " ", text)
+    text = re.sub(r"\bimage\s*:", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"[ᄀ-ᄒ](?:\s+[ᄀ-ᄒ]){5,}", " ", text)
+    text = re.sub(r"\bA\s+B\s+C\s+D\s+E\s+F\s+G\s+H\s+I\s+J\s+K\s+L\s+M\s+N\s+O\s+P\s+Q\s+R\s+S\s+T\s+U\s+V\s+W\s+X\s+Y\s+Z\b", " ", text)
+    for phrase in WEB_BOILERPLATE_PHRASES:
+        flexible_phrase = r"\s+".join(re.escape(part) for part in phrase.split())
+        text = re.sub(flexible_phrase, " ", text)
+        text = text.replace(phrase, " ")
+    text = re.sub(r"이전글\s+.*?\s+다음글\s+.*?\s+목록", " ", text)
+    for footer_marker in ["농촌진흥청 농업전문정보", "대표전화 063-238-1000", "저작권정책"]:
+        if footer_marker in text:
+            text = text[: text.find(footer_marker)]
+    text = re.sub(r"\b농사로\s+농사로\b", "농사로", text)
+    text = re.sub(r"(?:\b닫기\b\s*){2,}", " ", text)
+
+    source_key = source_key or ""
+    if source_key.startswith("nongsaro"):
+        markers = [
+            "실내정원용 식물 검색 상세표",
+            "학명 :",
+            "물주기",
+            "작물검색",
+            "생산기술",
+            "주요핵심기술",
+        ]
+        candidates = [text]
+        if title:
+            title_tail = title.split(" - ")[-1].strip()
+            if title_tail and title_tail in text:
+                candidates.append(text[text.find(title_tail) :])
+        for marker in markers:
+            if marker in text:
+                candidates.append(text[text.find(marker) :])
+        text = min(candidates, key=len)
+
+    return normalize_text(text)
+
+
+def infer_crop_or_plant(*values: Any) -> list[str]:
+    haystack = normalize_text(" ".join(str(value) for value in values if value))
+    found: list[str] = []
+    for name in KNOWN_CROP_OR_PLANT_NAMES:
+        if name in haystack and name not in found:
+            found.append(name)
+    return found
 
 
 def stable_hash(value: str, length: int = 16) -> str:

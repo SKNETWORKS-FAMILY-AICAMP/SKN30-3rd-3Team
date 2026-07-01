@@ -14,7 +14,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sources", default=str(DEFAULT_SOURCES))
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--replace", action="store_true", help="Delete existing rag_chunks for loaded source_ids first.")
-    parser.add_argument("--include-metadata", action="store_true", help="Also upload rag_chunks.metadata if the DB column exists.")
+    parser.add_argument(
+        "--include-metadata",
+        action="store_true",
+        help="Deprecated compatibility flag. Metadata is included by default unless --skip-metadata is used.",
+    )
+    parser.add_argument("--skip-metadata", action="store_true", help="Do not upload rag_chunks.metadata.")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -85,9 +90,18 @@ def main() -> None:
         for source_id in source_ids:
             client.table("rag_chunks").delete().eq("source_id", source_id).execute()
 
-    payloads = [chunk_payload(row, include_metadata=args.include_metadata) for row in chunks]
-    for batch in batched(payloads, args.batch_size):
-        client.table("rag_chunks").upsert(batch, on_conflict="chunk_id").execute()
+    include_metadata = not args.skip_metadata or args.include_metadata
+    payloads = [chunk_payload(row, include_metadata=include_metadata) for row in chunks]
+    try:
+        for batch in batched(payloads, args.batch_size):
+            client.table("rag_chunks").upsert(batch, on_conflict="chunk_id").execute()
+    except Exception as exc:
+        if not include_metadata:
+            raise
+        print(f"Metadata upload failed, retrying without metadata. Reason: {exc}")
+        payloads = [chunk_payload(row, include_metadata=False) for row in chunks]
+        for batch in batched(payloads, args.batch_size):
+            client.table("rag_chunks").upsert(batch, on_conflict="chunk_id").execute()
 
     print("Supabase pgvector load complete.")
 

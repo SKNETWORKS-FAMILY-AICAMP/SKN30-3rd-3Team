@@ -7,6 +7,7 @@ from typing import Any
 from common import (
     chunk_text,
     detect_symptom_keywords,
+    infer_crop_or_plant,
     load_source_registry,
     merge_safety_tags,
     normalize_text,
@@ -51,9 +52,33 @@ def chunk_record(doc: dict[str, Any], text: str, index: int) -> dict[str, Any]:
     chunk_id = uuid_for_chunk_key(chunk_key)
     safety_tags = merge_safety_tags(doc.get("safety_tags"))
     content = normalize_text(text)
+    crop_or_plant = list(doc.get("crop_or_plant", []))
+    inference_text = doc.get("title", "") if source_key.startswith("nongsaro") else f"{doc.get('title', '')} {content}"
+    for name in infer_crop_or_plant(inference_text):
+        if name not in crop_or_plant:
+            crop_or_plant.append(name)
     symptom_keywords = doc.get("symptom_keywords") or detect_symptom_keywords(content)
     if not symptom_keywords:
         symptom_keywords = [doc.get("category") or "general_reference"]
+    metadata = {
+        "chunkId": chunk_id,
+        "chunkKey": chunk_key,
+        "docId": doc_id,
+        "sourceId": source_id,
+        "sourceKey": source_key,
+        "title": doc["title"],
+        "publisher": doc.get("publisher", ""),
+        "url": doc.get("url", ""),
+        "license": doc.get("license", ""),
+        "category": doc.get("category", ""),
+        "cropOrPlant": crop_or_plant,
+        "symptomKeywords": symptom_keywords,
+        "safetyTags": safety_tags,
+        "usageScope": doc.get("usage_scope", "rag"),
+    }
+    if doc.get("image_refs"):
+        metadata["imageRefs"] = doc["image_refs"]
+
     return {
         "chunk_id": chunk_id,
         "chunk_key": chunk_key,
@@ -68,27 +93,21 @@ def chunk_record(doc: dict[str, Any], text: str, index: int) -> dict[str, Any]:
         "category": doc.get("category", ""),
         "priority": doc.get("priority", 99),
         "usage_scope": doc.get("usage_scope", "rag"),
-        "crop_or_plant": doc.get("crop_or_plant", []),
+        "crop_or_plant": crop_or_plant,
         "symptom_keywords": symptom_keywords,
         "safety_tags": safety_tags,
         "text": content,
-        "metadata": {
-            "chunkId": chunk_id,
-            "chunkKey": chunk_key,
-            "docId": doc_id,
-            "sourceId": source_id,
-            "sourceKey": source_key,
-            "title": doc["title"],
-            "publisher": doc.get("publisher", ""),
-            "url": doc.get("url", ""),
-            "license": doc.get("license", ""),
-            "category": doc.get("category", ""),
-            "cropOrPlant": doc.get("crop_or_plant", []),
-            "symptomKeywords": symptom_keywords,
-            "safetyTags": safety_tags,
-            "usageScope": doc.get("usage_scope", "rag"),
-        },
+        "metadata": metadata,
     }
+
+
+def chunking_params(doc: dict[str, Any], default_max_chars: int, default_overlap_chars: int) -> tuple[int, int]:
+    source_key = doc.get("source_key", "")
+    if source_key == "ncpms_pest_reference":
+        return min(default_max_chars, 1400), min(default_overlap_chars, 160)
+    if source_key in {"nongsaro_indoor_catalog", "nongsaro_crop_tech"}:
+        return min(default_max_chars, 1200), min(default_overlap_chars, 140)
+    return default_max_chars, default_overlap_chars
 
 
 def main() -> None:
@@ -102,7 +121,8 @@ def main() -> None:
         if not doc.get("source_id"):
             raise ValueError(f"Missing source_id for doc_id={doc.get('doc_id')}")
         sources.setdefault(doc["source_id"], source_record(doc, registry))
-        parts = chunk_text(doc.get("text", ""), max_chars=args.max_chars, overlap_chars=args.overlap_chars)
+        max_chars, overlap_chars = chunking_params(doc, args.max_chars, args.overlap_chars)
+        parts = chunk_text(doc.get("text", ""), max_chars=max_chars, overlap_chars=overlap_chars)
         for index, part in enumerate(parts, start=1):
             chunks.append(chunk_record(doc, part, index))
 

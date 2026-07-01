@@ -10,10 +10,12 @@ from urllib.parse import urljoin, urlparse
 from common import (
     INTERIM_DIR,
     RAW_DIR,
+    clean_scraped_text,
     detect_symptom_keywords,
     ensure_dirs,
     html_to_text,
     http_get_text,
+    infer_crop_or_plant,
     load_source_registry,
     merge_safety_tags,
     now_iso,
@@ -65,15 +67,21 @@ def should_collect(source: dict[str, Any], selected_ids: set[str] | None, max_pr
 
 def make_doc(source: dict[str, Any], url: str, raw_html: str, raw_path: Path, title: str | None = None) -> dict[str, Any]:
     source_id = source["source_id"]
-    text = html_to_text(raw_html)
     doc_title = title or source["title"]
-    crop_or_plant = source.get("target_crops", [])
-    if source_id == "nongsaro_indoor_catalog" and title:
-        crop_or_plant = [title]
+    source_key = source["source_key"]
+    text = clean_scraped_text(html_to_text(raw_html), source_key=source_key, title=doc_title)
+    crop_or_plant = list(source.get("target_crops", []))
+    is_index_doc = source_key.startswith("nongsaro") and doc_title == source["title"]
+    if not is_index_doc:
+        inference_text = doc_title if source_key.startswith("nongsaro") else f"{doc_title} {text}"
+        inferred = infer_crop_or_plant(inference_text)
+        for name in inferred:
+            if name not in crop_or_plant:
+                crop_or_plant.append(name)
 
     return {
         "doc_id": f"{source_id}:{stable_hash(url)}",
-        "source_key": source["source_key"],
+        "source_key": source_key,
         "source_id": source["source_uuid"],
         "title": doc_title,
         "publisher": source["publisher"],
@@ -230,7 +238,8 @@ def main() -> None:
             continue
         try:
             root_doc = collect_source(source, timeout=args.timeout)
-            docs.append(root_doc)
+            detail_docs: list[dict[str, Any]] = []
+            detail_errors: list[dict[str, str]] = []
             if not args.no_details:
                 detail_docs, detail_errors = collect_detail_docs(
                     source=source,
@@ -238,8 +247,11 @@ def main() -> None:
                     timeout=args.timeout,
                     max_detail_pages=args.max_detail_pages,
                 )
-                docs.extend(detail_docs)
                 errors.extend(detail_errors)
+            if detail_docs and source["source_id"] in {"nongsaro_indoor_catalog", "nongsaro_crop_tech"}:
+                docs.extend(detail_docs)
+            else:
+                docs.append(root_doc)
         except Exception as exc:
             errors.append({"source_id": source["source_id"], "error": str(exc)})
 
