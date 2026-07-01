@@ -6,6 +6,7 @@ from typing import Any
 
 from common import (
     chunk_text,
+    detect_symptom_keywords,
     load_source_registry,
     merge_safety_tags,
     normalize_text,
@@ -50,6 +51,9 @@ def chunk_record(doc: dict[str, Any], text: str, index: int) -> dict[str, Any]:
     chunk_id = uuid_for_chunk_key(chunk_key)
     safety_tags = merge_safety_tags(doc.get("safety_tags"))
     content = normalize_text(text)
+    symptom_keywords = doc.get("symptom_keywords") or detect_symptom_keywords(content)
+    if not symptom_keywords:
+        symptom_keywords = [doc.get("category") or "general_reference"]
     return {
         "chunk_id": chunk_id,
         "chunk_key": chunk_key,
@@ -65,7 +69,7 @@ def chunk_record(doc: dict[str, Any], text: str, index: int) -> dict[str, Any]:
         "priority": doc.get("priority", 99),
         "usage_scope": doc.get("usage_scope", "rag"),
         "crop_or_plant": doc.get("crop_or_plant", []),
-        "symptom_keywords": doc.get("symptom_keywords", []),
+        "symptom_keywords": symptom_keywords,
         "safety_tags": safety_tags,
         "text": content,
         "metadata": {
@@ -80,7 +84,7 @@ def chunk_record(doc: dict[str, Any], text: str, index: int) -> dict[str, Any]:
             "license": doc.get("license", ""),
             "category": doc.get("category", ""),
             "cropOrPlant": doc.get("crop_or_plant", []),
-            "symptomKeywords": doc.get("symptom_keywords", []),
+            "symptomKeywords": symptom_keywords,
             "safetyTags": safety_tags,
             "usageScope": doc.get("usage_scope", "rag"),
         },

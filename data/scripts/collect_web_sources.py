@@ -54,7 +54,13 @@ def should_collect(source: dict[str, Any], selected_ids: set[str] | None, max_pr
         return False
     if not selected_ids and not collect_all and int(source.get("priority", 99)) > max_priority:
         return False
-    return source.get("collection_mode") in {"web", "web_or_api_later", "catalog_only"}
+    return source.get("collection_mode") in {
+        "web",
+        "web_or_api",
+        "web_or_api_later",
+        "pdf_manifest_or_web",
+        "catalog_only",
+    }
 
 
 def make_doc(source: dict[str, Any], url: str, raw_html: str, raw_path: Path, title: str | None = None) -> dict[str, Any]:
