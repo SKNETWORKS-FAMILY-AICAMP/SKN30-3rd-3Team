@@ -6,6 +6,9 @@ from pathlib import Path
 # 프로젝트 루트
 root_dir = Path(__file__).resolve().parents[2]
 sys.path.append(str(root_dir))
+sys.path.append(str(root_dir / "data" / "scripts"))
+
+from common import uuid_for_chunk_key, uuid_for_source_key
 
 def main():
     print("환경변수 로드 중...")
@@ -55,7 +58,8 @@ def main():
     print("임베딩 데이터 추출 및 Supabase 적재 시작...")
     
     for doc in docs:
-        source_id = doc["id"]
+        source_key = doc["id"]
+        source_id = uuid_for_source_key(source_key)
         title = doc["title"]
         url = doc["url"]
         publisher = doc["publisher"]
@@ -79,7 +83,7 @@ def main():
         embedding_vector = res.data[0].embedding
 
         print(f"[{source_id}] 1536차원 벡터 데이터베이스 적재 중...")
-        chunk_id = f"{source_id}_chunk1"
+        chunk_id = uuid_for_chunk_key(f"{source_key}_chunk1")
         
         db.table("rag_chunks").upsert({
             "chunk_id": chunk_id,

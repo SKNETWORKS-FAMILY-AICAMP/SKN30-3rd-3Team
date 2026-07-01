@@ -6,6 +6,9 @@ from pathlib import Path
 # 프로젝트 루트를 sys.path에 추가
 root_dir = Path(__file__).resolve().parents[2]
 sys.path.append(str(root_dir))
+sys.path.append(str(root_dir / "data" / "scripts"))
+
+from common import uuid_for_source_key
 
 def main():
     print("가이드 문서 데이터셋 로드 중...")
@@ -48,7 +51,8 @@ def main():
     documents = []
     for doc in docs:
         metadata = {
-            "source_id": doc["id"],
+            "source_id": uuid_for_source_key(doc["id"]),
+            "source_key": doc["id"],
             "title": doc["title"],
             "url": doc["url"],
             "publisher": doc["publisher"]

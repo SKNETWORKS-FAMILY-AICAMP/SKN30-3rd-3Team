@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Any
+
+from common import (
+    chunk_text,
+    load_source_registry,
+    merge_safety_tags,
+    normalize_text,
+    read_jsonl,
+    stable_hash,
+    uuid_for_chunk_key,
+    write_jsonl,
+)
+from config import DEFAULT_CHUNKS, DEFAULT_NORMALIZED_DOCS, DEFAULT_SOURCES
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Chunk normalized RAG documents with citation metadata.")
+    parser.add_argument("--input", default=str(DEFAULT_NORMALIZED_DOCS))
+    parser.add_argument("--output", default=str(DEFAULT_CHUNKS))
+    parser.add_argument("--sources-output", default=str(DEFAULT_SOURCES))
+    parser.add_argument("--max-chars", type=int, default=2200)
+    parser.add_argument("--overlap-chars", type=int, default=250)
+    return parser.parse_args()
+
+
+def source_record(doc: dict[str, Any], registry: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    source = registry.get(doc.get("source_key")) or registry.get(doc.get("source_id")) or {}
+    return {
+        "source_id": doc["source_id"],
+        "source_key": doc.get("source_key", ""),
+        "title": source.get("title") or doc["title"],
+        "publisher": source.get("publisher") or doc.get("publisher", ""),
+        "url": source.get("url") or doc.get("url", ""),
+        "license": source.get("license") or doc.get("license", ""),
+        "collected_at": doc.get("collected_at", ""),
+        "category": source.get("category") or doc.get("category", ""),
+        "priority": source.get("priority") or doc.get("priority", 99),
+    }
+
+
+def chunk_record(doc: dict[str, Any], text: str, index: int) -> dict[str, Any]:
+    source_id = doc["source_id"]
+    source_key = doc.get("source_key", "")
+    doc_id = doc["doc_id"]
+    chunk_key = f"{source_key or source_id}:{stable_hash(doc_id, 10)}:{index:04d}"
+    chunk_id = uuid_for_chunk_key(chunk_key)
+    safety_tags = merge_safety_tags(doc.get("safety_tags"))
+    content = normalize_text(text)
+    return {
+        "chunk_id": chunk_id,
+        "chunk_key": chunk_key,
+        "source_id": source_id,
+        "source_key": source_key,
+        "doc_id": doc_id,
+        "title": doc["title"],
+        "publisher": doc.get("publisher", ""),
+        "url": doc.get("url", ""),
+        "license": doc.get("license", ""),
+        "collected_at": doc.get("collected_at", ""),
+        "category": doc.get("category", ""),
+        "priority": doc.get("priority", 99),
+        "usage_scope": doc.get("usage_scope", "rag"),
+        "crop_or_plant": doc.get("crop_or_plant", []),
+        "symptom_keywords": doc.get("symptom_keywords", []),
+        "safety_tags": safety_tags,
+        "text": content,
+        "metadata": {
+            "chunkId": chunk_id,
+            "chunkKey": chunk_key,
+            "docId": doc_id,
+            "sourceId": source_id,
+            "sourceKey": source_key,
+            "title": doc["title"],
+            "publisher": doc.get("publisher", ""),
+            "url": doc.get("url", ""),
+            "license": doc.get("license", ""),
+            "category": doc.get("category", ""),
+            "cropOrPlant": doc.get("crop_or_plant", []),
+            "symptomKeywords": doc.get("symptom_keywords", []),
+            "safetyTags": safety_tags,
+            "usageScope": doc.get("usage_scope", "rag"),
+        },
+    }
+
+
+def main() -> None:
+    args = parse_args()
+    docs = read_jsonl(Path(args.input))
+    registry = load_source_registry()
+    chunks: list[dict[str, Any]] = []
+    sources: dict[str, dict[str, Any]] = {}
+
+    for doc in docs:
+        if not doc.get("source_id"):
+            raise ValueError(f"Missing source_id for doc_id={doc.get('doc_id')}")
+        sources.setdefault(doc["source_id"], source_record(doc, registry))
+        parts = chunk_text(doc.get("text", ""), max_chars=args.max_chars, overlap_chars=args.overlap_chars)
+        for index, part in enumerate(parts, start=1):
+            chunks.append(chunk_record(doc, part, index))
+
+    source_count = write_jsonl(Path(args.sources_output), sources.values())
+    chunk_count = write_jsonl(Path(args.output), chunks)
+    print(f"Wrote {chunk_count} chunks: {args.output}")
+    print(f"Wrote {source_count} sources: {args.sources_output}")
+
+
+if __name__ == "__main__":
+    main()
