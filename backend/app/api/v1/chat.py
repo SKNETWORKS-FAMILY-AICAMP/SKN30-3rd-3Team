@@ -6,7 +6,7 @@ from supabase import Client
 from app.auth.security import get_current_user
 from app.db.session import get_supabase_client
 from app.schemas.chat import PlantCareChatRequest, PlantCareChatResponse, Citation, ChatSession, ChatMessage
-from app.services.rag.pipeline import run_rag_workflow
+from app.services.rag.pipeline import chat_mode_prefix, run_rag_workflow
 
 router = APIRouter(prefix="/chat", tags=["Plant Care RAG Chat"])
 
@@ -43,7 +43,9 @@ async def consult_plant_care(
             care_log_id=str(request.careLogId) if request.careLogId else None,
             photo_id=str(request.photoId) if request.photoId else None,
             question=request.question,
-            new_session=request.newSession
+            new_session=request.newSession,
+            response_mode=request.responseMode,
+            recent_messages=[message.model_dump() for message in request.recentMessages]
         )
         
         citations = []
@@ -81,6 +83,7 @@ async def consult_plant_care(
 @router.get("/sessions", response_model=List[ChatSession], summary="상담 세션 목록 조회")
 async def list_chat_sessions(
     plantId: uuid.UUID | None = Query(None, description="특정 식물의 상담 세션만 조회"),
+    responseMode: str | None = Query(None, pattern="^(expert|companion)$", description="상담 모드별 세션 필터"),
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)
 ):
@@ -88,6 +91,8 @@ async def list_chat_sessions(
         query = db.table("chat_sessions").select("*").eq("user_id", str(current_user_id))
         if plantId:
             query = query.eq("plant_id", str(plantId))
+        if responseMode:
+            query = query.like("title", f"{chat_mode_prefix(responseMode)}%")
         response = query.order("created_at", desc=True).execute()
         sessions = []
         for item in response.data:

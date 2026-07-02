@@ -94,7 +94,7 @@ def analyze_plant_image(db: Client, storage_path: str, question: str) -> dict[st
     try:
         from openai import OpenAI
 
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=18.0, max_retries=0)
         response = client.chat.completions.create(
             model=settings.VISION_MODEL,
             temperature=0.1,

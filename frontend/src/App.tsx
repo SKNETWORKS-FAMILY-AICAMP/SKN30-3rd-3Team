@@ -19,7 +19,15 @@ import {
   updatePlant,
   uploadPlantPhoto
 } from "./api";
-import type { ChatMessage, ChatSession, Plant, PlantCareChatResponse, PlantCatalogItem } from "./types";
+import type {
+  ChatMemoryMessage,
+  ChatMessage,
+  ChatResponseMode,
+  ChatSession,
+  Plant,
+  PlantCareChatResponse,
+  PlantCatalogItem
+} from "./types";
 
 type DesignPage = "login" | "dashboard" | "add" | "detail" | "chat";
 
@@ -42,6 +50,8 @@ const hashToPage: Record<string, DesignPage> = {
 const SELECTED_PLANT_ID_KEY = "farmhani_selected_plant_id";
 const LAST_SESSION_ID_KEY = "farmhani_last_session_id";
 const PENDING_DIAGNOSIS_QUESTION_KEY = "farmhani_pending_diagnosis_question";
+const CHAT_RESPONSE_MODE_KEY = "farmhani_chat_response_mode";
+const CHAT_MEMORY_KEY = "farmhani_chat_memory";
 
 const defaultPlantImages = [
   "https://images.unsplash.com/photo-1614594975525-e45190c55d0b?auto=format&fit=crop&w=1200&q=80",
@@ -80,7 +90,48 @@ function getSelectedPlantId() {
 }
 
 function setLastSessionId(sessionId?: string) {
-  if (sessionId) localStorage.setItem(LAST_SESSION_ID_KEY, sessionId);
+  if (sessionId) localStorage.setItem(getLastSessionStorageKey(), sessionId);
+}
+
+function getStoredChatResponseMode(): ChatResponseMode {
+  const value = localStorage.getItem(CHAT_RESPONSE_MODE_KEY);
+  return value === "companion" ? "companion" : "expert";
+}
+
+function getLastSessionStorageKey(plantId = getSelectedPlantId(), mode = getStoredChatResponseMode()) {
+  return `${LAST_SESSION_ID_KEY}:${plantId || "none"}:${mode}`;
+}
+
+function getLastSessionId(plantId = getSelectedPlantId(), mode = getStoredChatResponseMode()) {
+  return localStorage.getItem(getLastSessionStorageKey(plantId, mode));
+}
+
+function clearLastSessionId(plantId = getSelectedPlantId(), mode = getStoredChatResponseMode()) {
+  localStorage.removeItem(getLastSessionStorageKey(plantId, mode));
+}
+
+function getChatMemoryStorageKey(plantId = getSelectedPlantId(), mode = getStoredChatResponseMode()) {
+  return `${CHAT_MEMORY_KEY}:${plantId || "none"}:${mode}`;
+}
+
+function loadLocalChatMemory(plantId = getSelectedPlantId(), mode = getStoredChatResponseMode()): ChatMemoryMessage[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getChatMemoryStorageKey(plantId, mode)) || "[]") as ChatMemoryMessage[];
+    return parsed
+      .filter((item) => (item.role === "user" || item.role === "assistant") && item.content?.trim())
+      .slice(-12);
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalChatMemory(plantId: string, mode: ChatResponseMode, messages: ChatMemoryMessage[]) {
+  localStorage.setItem(getChatMemoryStorageKey(plantId, mode), JSON.stringify(messages.slice(-12)));
+}
+
+function appendLocalChatMemory(plantId: string, mode: ChatResponseMode, ...messages: ChatMemoryMessage[]) {
+  const next = [...loadLocalChatMemory(plantId, mode), ...messages].filter((item) => item.content.trim()).slice(-12);
+  saveLocalChatMemory(plantId, mode, next);
 }
 
 function formatDate(value?: string | null) {
@@ -182,6 +233,7 @@ function App() {
   const pendingChatPhotoRef = useRef<File | null>(null);
   const pendingChatPhotoNoteRef = useRef("");
   const forceNewChatSessionRef = useRef(false);
+  const chatResponseModeRef = useRef<ChatResponseMode>(getStoredChatResponseMode());
   const dashboardPlantsRef = useRef<Plant[]>([]);
 
   useEffect(() => {
@@ -797,11 +849,9 @@ function App() {
   }
 
   function bindTopSearch(doc: Document) {
-    const searchInput = Array.from(doc.querySelectorAll("header input[type='text']")).find((input) =>
-      (input as HTMLInputElement).placeholder.includes("검색")
-    ) as HTMLInputElement | undefined;
+    const searchInput = doc.querySelector("header input[type='text']") as HTMLInputElement | null;
     if (!searchInput) return;
-    searchInput.placeholder = "공식 문서 검색...";
+    searchInput.placeholder = "공식 문서/식물 데이터 검색...";
 
     const parent = searchInput.parentElement as HTMLElement | null;
     if (!parent) return;
@@ -1025,6 +1075,17 @@ function App() {
     });
   }
 
+  function setPendingChatPhoto(doc: Document, file?: File | null) {
+    pendingChatPhotoRef.current = file ?? null;
+    pendingChatPhotoNoteRef.current = "";
+    setChatAttachmentStatus(doc, pendingChatPhotoRef.current);
+    const textarea = doc.querySelector("textarea") as HTMLTextAreaElement | null;
+    if (textarea && file && !textarea.value.trim()) {
+      textarea.value = "첨부한 사진을 기준으로 현재 식물 상태를 봐줘";
+      textarea.focus();
+    }
+  }
+
   function showTextInputModal(
     doc: Document,
     options: { title: string; description: string; placeholder: string; submitLabel: string },
@@ -1067,15 +1128,19 @@ function App() {
   function appendAssistantLoading(doc: Document) {
     const messages = doc.getElementById("chat-messages");
     if (!messages) return null;
+    const isCompanionMode = chatResponseModeRef.current === "companion";
+    const loadingText = isCompanionMode
+      ? "내 기록이랑 공식 자료를 같이 보면서 뭐라고 말해줄지 정리하고 있어..."
+      : "공식 자료와 내 식물 기록을 함께 확인하고 있습니다...";
 
     const wrapper = doc.createElement("div");
     wrapper.className = "flex flex-col items-start gap-2 animate-fade-in";
     wrapper.innerHTML = `<div class="flex items-start gap-3 max-w-[85%]">
       <div class="w-8 h-8 rounded-full bg-sage-accent flex-shrink-0 flex items-center justify-center">
-        <span class="material-symbols-outlined text-primary text-[18px]">nature</span>
+        <span class="material-symbols-outlined text-primary text-[18px]">${isCompanionMode ? "local_florist" : "nature"}</span>
       </div>
       <div class="bg-surface-container-lowest border border-outline-variant/30 p-5 rounded-2xl rounded-tl-none shadow-sm">
-        <p class="text-body-md text-on-surface">공식 자료와 내 식물 기록을 함께 확인하고 있습니다...</p>
+        <p class="text-body-md text-on-surface">${loadingText}</p>
       </div>
     </div>`;
     messages.appendChild(wrapper);
@@ -1084,6 +1149,11 @@ function App() {
   }
 
   function renderAssistantAnswer(doc: Document, wrapper: HTMLElement, answer: PlantCareChatResponse) {
+    const isCompanionMode = chatResponseModeRef.current === "companion";
+    const assistantIcon = isCompanionMode ? "local_florist" : "nature";
+    const summaryLabel = isCompanionMode ? "식물의 한마디" : "관찰 요약";
+    const causesLabel = isCompanionMode ? "내가 힘든 이유 후보" : "가능성이 있는 원인";
+    const checklistLabel = isCompanionMode ? "나를 봐줄 포인트" : "다음 관찰 포인트";
     const causes = answer.possibleCauses
       .map((item) => `<span class="inline-flex rounded-full bg-surface-container px-3 py-1 text-label-sm text-on-surface-variant">${escapeHtml(item)}</span>`)
       .join("");
@@ -1108,12 +1178,12 @@ function App() {
 
     wrapper.innerHTML = `<div class="flex items-start gap-3 max-w-[85%]">
       <div class="w-8 h-8 rounded-full bg-sage-accent flex-shrink-0 flex items-center justify-center">
-        <span class="material-symbols-outlined text-primary text-[18px]">nature</span>
+        <span class="material-symbols-outlined text-primary text-[18px]">${assistantIcon}</span>
       </div>
       <div class="bg-surface-container-lowest border border-outline-variant/30 p-5 rounded-2xl rounded-tl-none shadow-sm space-y-5">
         <div class="space-y-2 border-b border-outline-variant/20 pb-4">
           <p class="text-label-sm font-bold text-primary flex items-center gap-2 uppercase tracking-wide">
-            <span class="material-symbols-outlined text-[16px]">auto_awesome</span>관찰 요약
+            <span class="material-symbols-outlined text-[16px]">auto_awesome</span>${summaryLabel}
           </p>
           <p class="text-body-md text-on-surface leading-relaxed">${escapeHtml(answer.summary)}</p>
         </div>
@@ -1130,7 +1200,7 @@ function App() {
         ${
           causes
             ? `<div class="space-y-2">
-                <p class="text-label-md font-bold text-on-surface">가능성이 있는 원인</p>
+                <p class="text-label-md font-bold text-on-surface">${causesLabel}</p>
                 <div class="flex flex-wrap gap-2">${causes}</div>
               </div>`
             : ""
@@ -1138,7 +1208,7 @@ function App() {
         ${
           checklist
             ? `<div class="rounded-xl border border-outline-variant/20 p-3">
-                <p class="text-label-md font-bold text-on-surface mb-2">다음 관찰 포인트</p>
+                <p class="text-label-md font-bold text-on-surface mb-2">${checklistLabel}</p>
                 <ul class="space-y-1 text-body-md text-on-surface-variant">${checklist}</ul>
               </div>`
             : ""
@@ -1188,17 +1258,75 @@ function App() {
       .join("");
   }
 
+  function bindChatModeSelector(doc: Document) {
+    const title = Array.from(doc.querySelectorAll("h3")).find((element) => normalizedText(element).includes("상담"));
+    const header =
+      (title?.closest(".glass-panel") as HTMLElement | null) ||
+      (Array.from(doc.querySelectorAll(".glass-panel")).find((element) => normalizedText(element).includes("Botanical Vision")) as HTMLElement | undefined) ||
+      null;
+    if (!header || header.querySelector("[data-chat-mode-selector]")) return;
+
+    const selector = doc.createElement("div");
+    selector.dataset.chatModeSelector = "true";
+    selector.className =
+      "flex items-center gap-1 bg-surface-container-low border border-outline-variant/20 rounded-full p-1 shadow-sm";
+    selector.innerHTML = `
+      <button type="button" class="px-3 py-1.5 rounded-full text-label-sm font-bold transition-all flex items-center gap-1" data-chat-mode="expert" title="전문가가 답변하는 차분한 상담 모드">
+        <span class="material-symbols-outlined text-[15px]">psychology</span>
+        <span class="hidden sm:inline">전문가</span>
+      </button>
+      <button type="button" class="px-3 py-1.5 rounded-full text-label-sm font-bold transition-all flex items-center gap-1" data-chat-mode="companion" title="등록한 식물이 직접 말하는 친근한 대화 모드">
+        <span class="material-symbols-outlined text-[15px]">local_florist</span>
+        <span class="hidden sm:inline">내 식물</span>
+      </button>`;
+
+    const rightActions = header.lastElementChild;
+    header.insertBefore(selector, rightActions ?? null);
+
+    const syncButtons = () => {
+      selector.querySelectorAll("[data-chat-mode]").forEach((button) => {
+        const mode = (button as HTMLElement).dataset.chatMode as ChatResponseMode;
+        const selected = mode === chatResponseModeRef.current;
+        button.className = selected
+          ? "px-3 py-1.5 rounded-full text-label-sm font-bold transition-all flex items-center gap-1 bg-primary text-white shadow-sm"
+          : "px-3 py-1.5 rounded-full text-label-sm font-bold transition-all flex items-center gap-1 text-on-surface-variant hover:bg-growth-light hover:text-primary";
+      });
+    };
+
+    selector.querySelectorAll("[data-chat-mode]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        const mode = (button as HTMLElement).dataset.chatMode as ChatResponseMode;
+        chatResponseModeRef.current = mode === "companion" ? "companion" : "expert";
+        localStorage.setItem(CHAT_RESPONSE_MODE_KEY, chatResponseModeRef.current);
+        syncButtons();
+        initializeChatCanvas(doc);
+        setChatAttachmentStatus(doc, pendingChatPhotoRef.current);
+        void renderChatSessions(doc, { autoLoadLast: true });
+      });
+    });
+    syncButtons();
+  }
+
   function initializeChatCanvas(doc: Document) {
     const messages = doc.getElementById("chat-messages");
+    const isCompanionMode = chatResponseModeRef.current === "companion";
+    const icon = isCompanionMode ? "local_florist" : "nature";
+    const introTitle = isCompanionMode
+      ? "나랑 바로 이야기해도 돼. 잎이 축 처졌는지, 흙이 말랐는지, 오늘 기분이 어떤지 물어봐줘."
+      : "식물 상태, 물주기, 빛, 흙 상태를 물어보세요. 사진을 첨부하면 사진에서 보이는 증상도 함께 참고합니다.";
+    const introCaption = isCompanionMode
+      ? "친근한 대화 모드지만 공식 문서와 내 관리 기록을 함께 참고해서 답합니다."
+      : "확정 진단보다는 관찰 가능한 가능성과 오늘 할 일을 중심으로 안내합니다.";
     if (messages) {
       messages.innerHTML = `<div class="flex flex-col items-start gap-2 animate-fade-in">
         <div class="flex items-start gap-3 max-w-[85%]">
           <div class="w-8 h-8 rounded-full bg-sage-accent flex-shrink-0 flex items-center justify-center">
-            <span class="material-symbols-outlined text-primary text-[18px]">nature</span>
+            <span class="material-symbols-outlined text-primary text-[18px]">${icon}</span>
           </div>
           <div class="bg-surface-container-lowest border border-outline-variant/30 p-5 rounded-2xl rounded-tl-none shadow-sm space-y-2">
-            <p class="text-body-md text-on-surface">식물 상태, 물주기, 빛, 흙 상태를 물어보세요. 사진을 첨부하면 사진에서 보이는 증상도 함께 참고합니다.</p>
-            <p class="text-label-sm text-on-surface-variant">확정 진단보다는 관찰 가능한 가능성과 오늘 할 일을 중심으로 안내합니다.</p>
+            <p class="text-body-md text-on-surface">${introTitle}</p>
+            <p class="text-label-sm text-on-surface-variant">${introCaption}</p>
           </div>
         </div>
       </div>`;
@@ -1276,7 +1404,15 @@ function App() {
       renderReferences(doc, []);
       messages.forEach((message) => renderHistoryMessage(doc, message));
       forceNewChatSessionRef.current = false;
-      localStorage.setItem(LAST_SESSION_ID_KEY, sessionId);
+      setLastSessionId(sessionId);
+      const plantId = getSelectedPlantId();
+      if (plantId) {
+        saveLocalChatMemory(
+          plantId,
+          chatResponseModeRef.current,
+          messages.map((message) => ({ role: message.sender, content: message.content }))
+        );
+      }
     } catch (error) {
       if (!handleApiError(doc, error)) frameAlert(doc, "대화 내역을 불러오지 못했습니다.");
     }
@@ -1289,7 +1425,8 @@ function App() {
 
     try {
       const plantId = getSelectedPlantId() || undefined;
-      const sessions = await listChatSessions(plantId);
+      const mode = chatResponseModeRef.current;
+      const sessions = await listChatSessions(plantId, mode);
       container.innerHTML = `<div class="flex items-center gap-3 p-3 mb-1 cursor-pointer hover:bg-growth-light dark:hover:bg-tertiary-container rounded-lg transition-all duration-200 text-on-surface-variant" data-chat-home="true">
         <span class="material-symbols-outlined">home</span>
         <span class="font-label-md">홈 개요</span>
@@ -1306,7 +1443,8 @@ function App() {
       container.querySelector("[data-chat-home]")?.addEventListener("click", () => navigate("dashboard"));
       container.querySelector("[data-new-chat]")?.addEventListener("click", () => {
         forceNewChatSessionRef.current = true;
-        localStorage.removeItem(LAST_SESSION_ID_KEY);
+        clearLastSessionId(plantId, mode);
+        if (plantId) saveLocalChatMemory(plantId, mode, []);
         pendingChatPhotoRef.current = null;
         pendingChatPhotoNoteRef.current = "";
         initializeChatCanvas(doc);
@@ -1319,7 +1457,7 @@ function App() {
         });
       });
 
-      const lastSession = localStorage.getItem(LAST_SESSION_ID_KEY);
+      const lastSession = getLastSessionId(plantId, mode);
       if (options.autoLoadLast && lastSession && sessions.some((session) => session.id === lastSession)) {
         void loadChatMessages(doc, lastSession);
       }
@@ -1329,7 +1467,7 @@ function App() {
   }
 
   function chatSessionItemHtml(session: ChatSession, index: number) {
-    const selected = localStorage.getItem(LAST_SESSION_ID_KEY) === session.id || index === 0;
+    const selected = getLastSessionId() === session.id || index === 0;
     const className = selected ? "text-primary font-bold" : "text-on-surface-variant";
     const title = session.title?.trim() || `상담 ${formatDate(session.createdAt)}`;
     return `<div class="flex items-center gap-3 p-3 mb-1 cursor-pointer hover:bg-growth-light rounded-lg ${className}" data-chat-session="${escapeHtml(session.id)}">
@@ -1348,16 +1486,40 @@ function App() {
       input.click();
     });
     input.addEventListener("change", () => {
-      pendingChatPhotoRef.current = input.files?.[0] ?? null;
-      if (pendingChatPhotoRef.current) {
-        pendingChatPhotoNoteRef.current = "";
-        setChatAttachmentStatus(doc, pendingChatPhotoRef.current);
-        const textarea = doc.querySelector("textarea") as HTMLTextAreaElement | null;
-        if (textarea && !textarea.value.trim()) {
-          textarea.value = "첨부한 사진을 기준으로 현재 식물 상태를 봐줘";
-          textarea.focus();
-        }
-      }
+      setPendingChatPhoto(doc, input.files?.[0] ?? null);
+    });
+  }
+
+  function bindChatImageDropAndPaste(doc: Document) {
+    const textarea = doc.querySelector("textarea") as HTMLTextAreaElement | null;
+    const inputBar = textarea?.closest(".relative") as HTMLElement | null;
+    const messages = doc.getElementById("chat-messages");
+    if (!textarea || !inputBar) return;
+
+    const pickImageFile = (files?: FileList | File[] | null) =>
+      Array.from(files || []).find((file) => file.type.startsWith("image/"));
+
+    textarea.addEventListener("paste", (event) => {
+      const file = pickImageFile(event.clipboardData?.files);
+      if (!file) return;
+      event.preventDefault();
+      setPendingChatPhoto(doc, file);
+    });
+
+    [inputBar, messages].filter(Boolean).forEach((target) => {
+      target?.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        inputBar.classList.add("ring-2", "ring-primary");
+      });
+      target?.addEventListener("dragleave", () => {
+        inputBar.classList.remove("ring-2", "ring-primary");
+      });
+      target?.addEventListener("drop", (event) => {
+        event.preventDefault();
+        inputBar.classList.remove("ring-2", "ring-primary");
+        const file = pickImageFile((event as DragEvent).dataTransfer?.files);
+        if (file) setPendingChatPhoto(doc, file);
+      });
     });
   }
 
@@ -1389,19 +1551,32 @@ function App() {
       const loading = appendAssistantLoading(doc);
       try {
         const plantId = await resolvePlantId(doc);
+        const responseMode = chatResponseModeRef.current;
         let photoId: string | undefined;
-        const newSession = forceNewChatSessionRef.current || !localStorage.getItem(LAST_SESSION_ID_KEY);
+        const localMemory = loadLocalChatMemory(plantId, responseMode);
+        const newSession = forceNewChatSessionRef.current || !getLastSessionId(plantId, responseMode);
 
         if (file) {
           const photo = await uploadPlantPhoto(plantId, file, pendingChatPhotoNoteRef.current || question);
           photoId = photo.id;
         }
 
-        const answer = await askPlantCare(question, plantId, { photoId, newSession });
+        const answer = await askPlantCare(question, plantId, {
+          photoId,
+          newSession,
+          responseMode,
+          recentMessages: localMemory
+        });
         forceNewChatSessionRef.current = false;
         setLastSessionId(answer.sessionId);
         if (loading) renderAssistantAnswer(doc, loading, answer);
         renderReferences(doc, answer.citations);
+        appendLocalChatMemory(
+          plantId,
+          responseMode,
+          { role: "user", content: question },
+          { role: "assistant", content: answer.summary }
+        );
         void renderChatSessions(doc, { autoLoadLast: false });
       } catch (error) {
         if (handleApiError(doc, error)) return;
@@ -1475,7 +1650,7 @@ function App() {
           PENDING_DIAGNOSIS_QUESTION_KEY,
           "첨부한 사진을 기준으로 현재 식물 상태를 진단해 주세요."
         );
-        localStorage.removeItem(LAST_SESSION_ID_KEY);
+        clearLastSessionId(undefined, chatResponseModeRef.current);
         navigate("chat");
       }
     });
@@ -1489,13 +1664,20 @@ function App() {
       .then((plant) => {
         const heroName = doc.querySelector("h1");
         const heroSpecies = heroName?.nextElementSibling;
-        const primaryImage = plant.imageUrl || storagePathToPublicUrl(plant.photos?.[0]?.storagePath) || "/design/dashboard_plant.png";
+        const primaryImage = plant.imageUrl || storagePathToPublicUrl(plant.photos?.[0]?.storagePath);
         if (heroName) heroName.textContent = plant.name;
         if (heroSpecies) heroSpecies.textContent = plant.species || "품종 미지정";
         const heroImage = doc.querySelector(".lg\\:col-span-5 img") as HTMLImageElement | null;
         if (heroImage) {
-          heroImage.src = primaryImage;
-          heroImage.alt = `${plant.name} 사진`;
+          if (primaryImage) {
+            heroImage.src = primaryImage;
+            heroImage.alt = `${plant.name} 사진`;
+          } else {
+            const placeholder = doc.createElement("div");
+            placeholder.className = "w-full h-full min-h-[320px] bg-surface-container flex flex-col items-center justify-center text-on-surface-variant";
+            placeholder.innerHTML = `<span class="material-symbols-outlined text-5xl mb-3">hide_image</span><span class="text-label-lg font-bold">사진 등록안함</span>`;
+            heroImage.replaceWith(placeholder);
+          }
         }
         const breadcrumb = Array.from(doc.querySelectorAll("span")).find((element) => normalizedText(element).includes("몬스테라 델리시오사"));
         if (breadcrumb) breadcrumb.textContent = plant.name;
@@ -1809,8 +1991,10 @@ function App() {
       bindQuickCareButtons(doc);
     }
     if (page === "chat") {
+      bindChatModeSelector(doc);
       initializeChatCanvas(doc);
       bindChatPhotoPicker(doc);
+      bindChatImageDropAndPaste(doc);
       bindChatSubmit(doc);
       bindChatQuickPrompts(doc);
       void renderChatSessions(doc, { autoLoadLast: true });

@@ -3,6 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, Field
 
+from app.db.session import supabase
 from app.services.rag.vectorstore import search_documents
 
 router = APIRouter(prefix="/rag", tags=["RAG Search"])
@@ -43,4 +44,32 @@ async def search_rag_documents(
                 score=result.score,
             )
         )
+    if not items:
+        try:
+            safe_query = q.replace(",", " ").strip()
+            catalog_response = (
+                supabase.table("plant_catalog")
+                .select("id,name,species,family_name,description")
+                .or_(f"name.ilike.%{safe_query}%,species.ilike.%{safe_query}%,description.ilike.%{safe_query}%")
+                .limit(limit)
+                .execute()
+            )
+            for row in catalog_response.data or []:
+                name = row.get("name") or "식물 도감 항목"
+                species = row.get("species") or ""
+                family_name = row.get("family_name") or ""
+                description = row.get("description") or ""
+                excerpt_parts = [part for part in [species, family_name, description] if part]
+                items.append(
+                    RagSearchResult(
+                        sourceId=f"plant_catalog:{row.get('id') or name}",
+                        title=f"식물 도감 - {name}",
+                        url=None,
+                        publisher="Farm하니 식물 도감",
+                        excerpt=" / ".join(excerpt_parts) or name,
+                        score=0.0,
+                    )
+                )
+        except Exception:
+            pass
     return items

@@ -45,6 +45,13 @@ export type UploadSignedUrlResponse = {
   storagePath: string;
 };
 
+export type ChatResponseMode = "expert" | "companion";
+
+export type ChatMemoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type PlantCareChatResponse = {
   summary: string;
   possibleCauses: string[];

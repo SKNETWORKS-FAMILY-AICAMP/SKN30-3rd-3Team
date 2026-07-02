@@ -9,6 +9,7 @@ from app.core.config import settings
 # 프로젝트 루트 경로 (Fallback 파일 조회용)
 backend_dir = Path(__file__).resolve().parents[4]
 docs_json_path = backend_dir / "data" / "processed" / "gardening_docs.json"
+SUPABASE_KEYWORD_SCAN_LIMIT = 3000
 
 class SearchResult:
     def __init__(self, content: str, metadata: Dict[str, Any], score: float):
@@ -26,10 +27,54 @@ STOPWORDS = {
 CARE_TERMS = {
     "물주기", "물관리", "키우기", "키우는", "방법", "관리법", "가이드", "재배", "재배법",
     "햇빛", "광량", "온도", "습도", "흙", "분갈이", "비료", "병해충", "잎", "줄기",
+    "수분공급", "관수", "생육", "건조", "과습", "일반", "황화", "갈변", "시듦",
+}
+
+PLANT_QUERY_TERMS = {
+    "몬스테라", "스투키", "산세베리아", "선인장", "금전수", "테이블야자", "홍콩야자", "호접란",
+    "스파티필럼", "보스턴고사리", "부레옥잠", "올리브나무", "오렌지쟈스민", "관음죽",
+    "벵갈고무나무", "디펜바키아", "토마토", "고추", "상추", "배추", "파프리카", "양배추",
+    "딸기", "감자", "고구마", "장미", "벚꽃", "개나리", "해바라기", "국화", "라벤더",
+    "로즈마리", "바질", "민트", "깻잎", "오이", "호박", "가지", "마늘", "양파", "부추",
+}
+
+PLANT_ALIASES = {
+    "monstera": "몬스테라",
+    "deliciosa": "몬스테라",
+    "sansevieria": "스투키",
+    "dracaena": "스투키",
+    "zamioculcas": "금전수",
+    "spathiphyllum": "스파티필럼",
+    "orchid": "호접란",
+    "phalaenopsis": "호접란",
+    "tomato": "토마토",
+    "lycopersicum": "토마토",
+    "capsicum": "고추",
+    "pepper": "고추",
+    "lettuce": "상추",
+    "lactuca": "상추",
+    "strawberry": "딸기",
+    "fragaria": "딸기",
+    "potato": "감자",
+    "solanum": "감자",
+    "sweet": "고구마",
+    "rose": "장미",
+    "rosa": "장미",
+    "helianthus": "해바라기",
+    "forsythia": "개나리",
 }
 
 
+def expand_query_aliases(query: str) -> str:
+    lower_query = query.lower()
+    aliases = [alias for key, alias in PLANT_ALIASES.items() if key in lower_query]
+    if not aliases:
+        return query
+    return f"{query} {' '.join(dict.fromkeys(aliases))}"
+
+
 def tokenize_query(query: str) -> List[str]:
+    query = expand_query_aliases(query)
     clean_query = query.replace(",", " ").replace("?", " ").replace(".", " ").replace("/", " ")
     tokens = []
     for token in clean_query.split():
@@ -48,6 +93,7 @@ def filter_by_specific_terms(query: str, results: List[SearchResult]) -> List[Se
     terms = specific_query_terms(query)
     if not terms:
         return results
+    plant_terms = [term for term in terms if term in PLANT_QUERY_TERMS]
 
     filtered = []
     for result in results:
@@ -61,6 +107,21 @@ def filter_by_specific_terms(query: str, results: List[SearchResult]) -> List[Se
                 metadata.get("excerpt"),
             ]
         ).lower()
+        if plant_terms:
+            title_haystack = " ".join(
+                str(part or "")
+                for part in [
+                    metadata.get("title"),
+                    metadata.get("section"),
+                    metadata.get("excerpt"),
+                ]
+            ).lower()
+            title_plant_terms = [term for term in PLANT_QUERY_TERMS if term.lower() in title_haystack]
+            if title_plant_terms and not any(term in plant_terms for term in title_plant_terms):
+                continue
+            if any(term.lower() in haystack for term in plant_terms):
+                filtered.append(result)
+            continue
         if any(term.lower() in haystack for term in terms):
             filtered.append(result)
     return filtered
@@ -128,7 +189,7 @@ def supabase_keyword_search(query: str, top_k: int = 3) -> List[SearchResult]:
     if not query_tokens:
         return []
 
-    response = None
+    rows: list[Dict[str, Any]] = []
     selects = [
         "chunk_id,source_id,text,symptom_keywords,metadata,rag_sources(title,url,publisher)",
         "chunk_id,source_id,text,symptom_keywords,rag_sources(title,url,publisher)",
@@ -138,16 +199,30 @@ def supabase_keyword_search(query: str, top_k: int = 3) -> List[SearchResult]:
     last_error: Exception | None = None
     for select_clause in selects:
         try:
-            response = session.supabase.table("rag_chunks").select(select_clause).limit(500).execute()
+            start = 0
+            page_size = 500
+            while start < SUPABASE_KEYWORD_SCAN_LIMIT:
+                response = (
+                    session.supabase.table("rag_chunks")
+                    .select(select_clause)
+                    .range(start, start + page_size - 1)
+                    .execute()
+                )
+                page = response.data or []
+                rows.extend(page)
+                if len(page) < page_size:
+                    break
+                start += page_size
             break
         except Exception as exc:
             last_error = exc
-    if response is None:
+            rows = []
+    if not rows and last_error is not None:
         print(f"[RAG SEARCH WARNING] Supabase keyword fallback 조회 실패: {last_error}")
         return []
 
     results = []
-    for item in response.data or []:
+    for item in rows:
         content = item.get("text") or item.get("content") or ""
         if not content:
             continue
@@ -211,7 +286,7 @@ def search_documents(query: str, top_k: int = 8) -> List[SearchResult]:
     if openai_key:
         try:
             from openai import OpenAI
-            openai_client = OpenAI(api_key=openai_key)
+            openai_client = OpenAI(api_key=openai_key, timeout=10.0, max_retries=0)
             
             # 1. OpenAI 임베딩 생성 (1536차원)
             res = openai_client.embeddings.create(

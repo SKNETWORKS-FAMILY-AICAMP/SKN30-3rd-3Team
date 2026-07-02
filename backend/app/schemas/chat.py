@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 from datetime import datetime
 
@@ -11,11 +11,17 @@ class Citation(BaseModel):
     excerpt: Optional[str] = Field(None, description="답변 근거가 된 문서 발췌문")
     section: Optional[str] = Field(None, description="문서 내 위치나 섹션 설명")
 
+class ChatMemoryMessage(BaseModel):
+    role: Literal["user", "assistant"] = Field(..., description="대화 메모리 메시지 역할")
+    content: str = Field(..., description="대화 메모리 텍스트")
+
 class PlantCareChatRequest(BaseModel):
     plantId: UUID = Field(..., description="상담 대상 식물의 UUID")
     careLogId: Optional[UUID] = Field(None, description="참조할 재배 일지의 UUID")
     photoId: Optional[UUID] = Field(None, description="참조할 식물 사진의 UUID")
     newSession: bool = Field(False, description="기존 식물 상담 세션을 재사용하지 않고 새 상담방을 생성할지 여부")
+    responseMode: Literal["expert", "companion"] = Field("expert", description="답변 말투 모드. expert=전문가 상담, companion=내 식물과 대화")
+    recentMessages: List[ChatMemoryMessage] = Field(default_factory=list, description="DB 세션 이력 보조용 최근 대화 메모리")
     question: str = Field(..., json_schema_extra={"example": "잎 끝이 마르고 아래쪽 잎이 노랗게 변했어요."}, description="사용자가 AI에 묻는 질문")
 
 class PlantCareChatResponse(BaseModel):

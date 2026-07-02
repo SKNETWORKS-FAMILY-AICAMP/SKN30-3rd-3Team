@@ -2,6 +2,8 @@ import { mockChatResponse, mockPlants } from "./mockData";
 import type {
   CareLog,
   ChatMessage,
+  ChatMemoryMessage,
+  ChatResponseMode,
   ChatSession,
   Plant,
   PlantCareChatResponse,
@@ -344,7 +346,13 @@ export async function uploadPlantPhoto(plantId: string, file: File, note?: strin
 export async function askPlantCare(
   question: string,
   plantId: string,
-  options: { careLogId?: string; photoId?: string; newSession?: boolean } = {}
+  options: {
+    careLogId?: string;
+    photoId?: string;
+    newSession?: boolean;
+    responseMode?: ChatResponseMode;
+    recentMessages?: ChatMemoryMessage[];
+  } = {}
 ): Promise<PlantCareChatResponse> {
   if (!hasSupabaseAuthConfig()) {
     return mockChatResponse;
@@ -357,14 +365,17 @@ export async function askPlantCare(
       careLogId: options.careLogId,
       photoId: options.photoId,
       newSession: options.newSession ?? false,
+      responseMode: options.responseMode ?? "expert",
+      recentMessages: options.recentMessages ?? [],
       question
     })
   });
 }
 
-export async function listChatSessions(plantId?: string) {
+export async function listChatSessions(plantId?: string, responseMode?: ChatResponseMode) {
   const params = new URLSearchParams();
   if (plantId) params.set("plantId", plantId);
+  if (responseMode) params.set("responseMode", responseMode);
   const query = params.toString();
   return request<ChatSession[]>(`/api/v1/chat/sessions${query ? `?${query}` : ""}`);
 }

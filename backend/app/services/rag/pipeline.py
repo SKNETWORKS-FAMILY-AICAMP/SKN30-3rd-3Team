@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import re
 from typing import Dict, Any, List, Optional, TypedDict
 from datetime import datetime, date, timezone
 from supabase import Client
@@ -38,6 +39,36 @@ def is_smalltalk_question(question: str) -> bool:
     return normalized in greetings or (len(normalized) <= 8 and any(word in normalized for word in greetings))
 
 
+def extract_user_name(text: str) -> Optional[str]:
+    patterns = [
+        r"(?:내\s*이름은|제\s*이름은)\s*([가-힣A-Za-z0-9_]{2,20}?)(?:이야|야|입니다|이에요|예요|라고|$)",
+        r"(?:나는|전|저는)\s*([가-힣A-Za-z0-9_]{2,20}?)(?:이야|야|입니다|이에요|예요|라고|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text.strip())
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def recall_user_name(question: str, chat_history: List[Dict[str, Any]]) -> Optional[str]:
+    current_name = extract_user_name(question)
+    if current_name:
+        return current_name
+    for item in reversed(chat_history):
+        if item.get("role") != "user":
+            continue
+        remembered = extract_user_name(str(item.get("content") or ""))
+        if remembered:
+            return remembered
+    return None
+
+
+def is_user_name_question(question: str) -> bool:
+    normalized = " ".join((question or "").strip().split())
+    return bool(re.search(r"(내|제)\s*이름.*(뭐|누구|기억|알)", normalized))
+
+
 def make_session_title(plant: Dict[str, Any], question: str) -> str:
     plant_label = (plant.get("name") or plant.get("species") or "식물").strip()
     clean_question = " ".join((question or "").split())
@@ -47,6 +78,12 @@ def make_session_title(plant: Dict[str, Any], question: str) -> str:
         clean_question = "상담"
     return f"{plant_label} · {clean_question}"
 
+def chat_mode_prefix(response_mode: str) -> str:
+    return "[내 식물]" if response_mode == "companion" else "[전문가]"
+
+def make_mode_session_title(plant: Dict[str, Any], question: str, response_mode: str) -> str:
+    return f"{chat_mode_prefix(response_mode)} {make_session_title(plant, question)}"
+
 class AgentState(TypedDict):
     # 입력 정보
     db_client: Client
@@ -55,6 +92,9 @@ class AgentState(TypedDict):
     care_log_id: Optional[str]
     photo_id: Optional[str]
     question: str
+    response_mode: str
+    request_chat_history: List[Dict[str, Any]]
+    chat_history: List[Dict[str, Any]]
     
     # 런타임 획득 정보
     plant_data: Dict[str, Any]
@@ -114,6 +154,67 @@ def validate_input(state: AgentState) -> Dict[str, Any]:
         "photo_data": photo_data,
         "recent_photos": recent_photos_res.data or []
     }
+
+def load_chat_history(state: AgentState) -> Dict[str, Any]:
+    db = state["db_client"]
+    user_id = state["user_id"]
+    plant_id = state["plant_id"]
+    response_mode = state.get("response_mode") or "expert"
+    prefix = chat_mode_prefix(response_mode)
+    request_history = [
+        {"role": item.get("role"), "content": str(item.get("content") or "")}
+        for item in state.get("request_chat_history") or []
+        if item.get("role") in {"user", "assistant"} and str(item.get("content") or "").strip()
+    ]
+
+    if state.get("new_session"):
+        return {"chat_history": request_history[-12:]}
+
+    try:
+        session_res = (
+            db.table("chat_sessions")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("plant_id", plant_id)
+            .like("title", f"{prefix}%")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not session_res.data:
+            return {"chat_history": []}
+
+        session_id = session_res.data[0]["id"]
+        messages_res = (
+            db.table("chat_messages")
+            .select("role,sender,content,created_at")
+            .eq("session_id", session_id)
+            .order("created_at", desc=True)
+            .limit(12)
+            .execute()
+        )
+        history = []
+        for item in reversed(messages_res.data or []):
+            content = item.get("content")
+            text = content.get("text", "") if isinstance(content, dict) else str(content or "")
+            if text.strip():
+                history.append({
+                    "role": item.get("role") or item.get("sender") or "user",
+                    "content": text.strip()
+                })
+        merged = [*history, *request_history]
+        deduped = []
+        seen = set()
+        for item in merged:
+            key = (item.get("role"), item.get("content"))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(item)
+        return {"chat_history": deduped[-12:]}
+    except Exception as exc:
+        logger.warning("Chat memory unavailable: %s", exc)
+        return {"chat_history": request_history[-12:]}
 
 # 2. extract_image_signals 노드
 def extract_image_signals(state: AgentState) -> Dict[str, Any]:
@@ -211,7 +312,7 @@ def build_retrieval_query(state: AgentState) -> Dict[str, Any]:
         try:
             import json
             from openai import OpenAI
-            client = OpenAI(api_key=openai_key)
+            client = OpenAI(api_key=openai_key, timeout=12.0, max_retries=0)
             prompt = (
                 "당신은 식물 관리 RAG 시스템의 검색 쿼리 생성기입니다. "
                 "주어진 상황에서 가장 관련성 높은 문서를 찾기 위한 검색 키워드 3개를 만드세요. "
@@ -262,9 +363,11 @@ def retrieve_docs(state: AgentState) -> Dict[str, Any]:
         ]
         if part
     )
-    query = compact_query or state["search_query"]
+    generated_query = state.get("search_query") or ""
+    query_parts = [compact_query, generated_query]
+    query = " ".join(dict.fromkeys(part.strip() for part in query_parts if part and part.strip()))
     if not query.strip():
-        query = state["search_query"]
+        query = generated_query
     search_results = search_documents(query, top_k=8)
     
     docs = []
@@ -280,6 +383,12 @@ def retrieve_docs(state: AgentState) -> Dict[str, Any]:
 def grade_or_rerank(state: AgentState) -> Dict[str, Any]:
     docs = state["retrieved_docs"]
     question = state["question"]
+    plant = state.get("plant_data") or {}
+    plant_label = " ".join(
+        str(part).strip()
+        for part in [plant.get("name"), plant.get("species")]
+        if part
+    ) or "unknown plant"
     openai_key = os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY
     
     if not openai_key or not docs:
@@ -287,7 +396,7 @@ def grade_or_rerank(state: AgentState) -> Dict[str, Any]:
         
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=openai_key)
+        client = OpenAI(api_key=openai_key, timeout=12.0, max_retries=0)
         
         filtered_docs = []
         for doc in docs:
@@ -295,8 +404,8 @@ def grade_or_rerank(state: AgentState) -> Dict[str, Any]:
                 model=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
                 temperature=0.0,
                 messages=[
-                    {"role": "system", "content": "사용자의 식물 관리 질문에 답하기 위해 주어진 문서가 유용한가요? 관련성이 있다면 'yes', 전혀 무관하다면 'no'만 출력하세요."},
-                    {"role": "user", "content": f"질문: {question}\n\n문서 내용: {doc.get('content')}"}
+                    {"role": "system", "content": "사용자가 특정 식물/작물에 대해 묻는 경우, 문서가 같은 식물/작물 또는 일반 관리 원칙에 직접 도움이 될 때만 'yes'를 출력하세요. 다른 식물/작물 전용 문서면 'no'만 출력하세요."},
+                    {"role": "user", "content": f"식물/작물: {plant_label}\n질문: {question}\n\n문서 제목: {(doc.get('metadata') or {}).get('title')}\n문서 내용: {doc.get('content')}"}
                 ]
             )
             score = str(res.choices[0].message.content or "").strip().lower()
@@ -322,10 +431,58 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
     context = state["user_context"]
     image_description = state.get("image_description") or "사진 분석 결과 없음"
     vision_error = state.get("vision_error")
+    response_mode = state.get("response_mode") or "expert"
+    is_companion_mode = response_mode == "companion"
+    plant = state.get("plant_data") or {}
+    plant_label = plant.get("name") or plant.get("species") or "식물"
+    chat_history = state.get("chat_history") or []
+    history_text = "\n".join(
+        f"{'사용자' if item.get('role') == 'user' else 'AI'}: {item.get('content')}"
+        for item in chat_history[-8:]
+    )
+    remembered_name = recall_user_name(question, chat_history)
+
+    if extract_user_name(question):
+        if is_companion_mode:
+            summary = f"알겠어. 네 이름은 {remembered_name}이야. 이 상담방에서는 그렇게 기억해둘게."
+        else:
+            summary = f"알겠습니다. 사용자님의 이름은 {remembered_name}입니다. 이 상담방에서 그렇게 기억해두겠습니다."
+        return {
+            "draft_answer": {
+                "summary": summary,
+                "possibleCauses": [],
+                "todayActions": ["이 이름은 현재 상담방의 대화 맥락에서 이어서 참고합니다."],
+                "observationChecklist": [],
+                "citations": [],
+            }
+        }
+
+    if is_user_name_question(question):
+        if remembered_name:
+            summary = f"네 이름은 {remembered_name}이야." if is_companion_mode else f"사용자님의 이름은 {remembered_name}입니다."
+        else:
+            summary = "아직 이 상담방에서 이름을 들은 기록을 찾지 못했어." if is_companion_mode else "아직 이 상담방에서 사용자님의 이름을 확인한 기록이 없습니다."
+        return {
+            "draft_answer": {
+                "summary": summary,
+                "possibleCauses": [],
+                "todayActions": [],
+                "observationChecklist": [],
+                "citations": [],
+            }
+        }
     
     if is_smalltalk_question(question):
-        plant = state.get("plant_data") or {}
-        plant_label = plant.get("name") or plant.get("species") or "식물"
+        if is_companion_mode:
+            return {
+                "draft_answer": {
+                    "summary": f"안녕, 나 {plant_label}야. 오늘 내 잎이나 흙 상태가 궁금하면 편하게 물어봐. 사진도 같이 보내주면 내가 지금 어떤 느낌인지 더 잘 말해볼게.",
+                    "possibleCauses": ["아직 구체적인 질문이나 상태 사진이 없어서 내 컨디션을 정확히 말하긴 어려워."],
+                    "todayActions": ["오늘은 내 흙이 얼마나 말랐는지 한 번 만져봐 줘.", "빛이 너무 세거나 바람이 바로 닿는 곳은 아닌지도 봐줘."],
+                    "observationChecklist": ["잎 색이 변했는지", "흙이 젖어 있는지", "마지막 물 준 날이 언제인지", "새잎이 잘 펴지는지"],
+                    "citations": [],
+                }
+            }
         return {
             "draft_answer": {
                 "summary": f"안녕하세요. {plant_label} 상담을 도와드릴게요. 물주기, 빛, 잎 상태, 흙 상태, 사진 진단 중 궁금한 내용을 편하게 적어주세요.",
@@ -362,8 +519,18 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
                 f"--- 문서: {(d.get('metadata') or {}).get('title') or '출처 미상'} ---\n{d.get('content') or ''}"
                 for d in docs
             ])
+            mode_instruction = (
+                f"답변 모드는 '내 식물과 대화하기'입니다. 당신은 사용자가 등록한 식물 '{plant_label}' 자신처럼 1인칭으로 말하세요. "
+                "친근한 반말을 사용하되 유치하거나 과장하지 말고, 식물이 부탁하는 듯한 짧은 문장을 섞으세요. "
+                "예: '나 내일 흙이 말라 있으면 물 한 번 부탁해.', '오늘은 빛이 너무 세지 않은지 봐줘.' "
+                "possibleCauses도 '내가 힘든 이유 후보'처럼 자연스럽게 쓰고, todayActions는 사용자가 식물을 돌보는 행동으로 작성하세요. "
+                "공식 문서 근거가 부족하면 '확실히는 모르겠어'라고 말하세요. 안전 관련 내용은 장난처럼 표현하지 마세요. "
+            ) if is_companion_mode else (
+                "답변 모드는 '전문가와 상담하기'입니다. 차분하고 전문적인 상담 말투를 사용하세요. "
+                "summary는 한 문단의 자연스러운 상담 말투로 작성하고, todayActions는 사용자가 바로 따라 할 수 있는 구체적인 행동으로 작성하세요. "
+            )
 
-            client = OpenAI(api_key=openai_key)
+            client = OpenAI(api_key=openai_key, timeout=18.0, max_retries=0)
             res = client.chat.completions.create(
                 model=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
                 temperature=0.1,
@@ -376,7 +543,7 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
                             "모든 답변은 JSON 객체만 출력합니다. "
                             "필드: evidenceNotes(string), summary(string), possibleCauses(string[]), todayActions(string[]), observationChecklist(string[]). "
                             "evidenceNotes 필드에는 사용자에게 보여줄 수 있는 짧은 근거 요약만 작성하세요. 내부 추론 과정이나 생각의 흐름은 출력하지 마세요. "
-                            "summary는 한 문단의 자연스러운 상담 말투로 작성하고, todayActions는 사용자가 바로 따라 할 수 있는 구체적인 행동으로 작성하세요. "
+                            f"{mode_instruction}"
                             "질병명 확정, 농약 직접 처방, 과도한 단정은 피하고 '~가능성', '관찰 필요' 중심으로 말하세요. "
                             "사진 분석 결과가 있으면 이를 관찰 근거로 반영하되, 사진만으로 확정 진단하지 마세요. "
                             "검색 문서가 부족하면 부족하다고 말하고 추가 사진/물주기/빛/흙 상태 정보를 요청하세요. "
@@ -389,6 +556,7 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
                             f"[식물 정보]\n{context}\n\n"
                             f"[사진 분석 결과]\n{image_description}\n\n"
                             f"[사진 분석 참고]\n{vision_error or '오류 없음'}\n\n"
+                            f"[이전 대화 메모리]\n{history_text or '이전 대화 없음'}\n\n"
                             f"[검색된 공식 문서]\n{docs_text or '검색 문서 없음'}\n\n"
                             f"[사용자 질문]\n{question}"
                         )
@@ -413,22 +581,37 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
             print(f"[RAG LLM WARNING] OpenAI 답변 생성 중 실패, 룰베이스 전환: {e}")
             
     combined_docs_text = " ".join([d.get("content", "") for d in docs])
-    combined_signal_text = f"{question} {context} {image_description} {' '.join(state.get('image_signals') or [])} {combined_docs_text}".lower()
+    combined_signal_text = f"{question} {context} {history_text} {image_description} {' '.join(state.get('image_signals') or [])} {combined_docs_text}".lower()
 
     if not docs:
-        summary = "현재 질문과 식물 기록만으로는 공식 문서 근거가 충분하지 않아 확정적인 판단은 어렵습니다."
-        possible_causes = [
-            "최근 물주기, 빛, 통풍, 흙 상태 정보가 부족합니다.",
-            "사진이나 재배 일지 없이 증상만으로는 원인 후보를 좁히기 어렵습니다."
-        ]
-        today_actions = [
-            "잎 앞뒤, 줄기 밑동, 흙 표면 사진을 추가로 기록합니다.",
-            "최근 물 준 날짜와 흙이 마르는 속도를 재배 일지에 남깁니다."
-        ]
-        checklist = [
-            "잎 색 변화가 새잎까지 번지는지 확인합니다.",
-            "줄기 밑동이 무르거나 흙 냄새가 나는지 확인합니다."
-        ]
+        if is_companion_mode:
+            summary = f"지금은 나({plant_label})에 대한 공식 문서 근거가 충분하지 않아서 확실히 말하긴 어려워. 그래도 오늘 내 잎, 흙, 빛 상태를 같이 보면 다음 답변은 훨씬 정확해질 거야."
+            possible_causes = [
+                "내 최근 물주기나 빛 기록이 부족해서 컨디션 원인을 좁히기 어려워.",
+                "사진이나 재배 일지가 없으면 잎 변화가 일시적인지 관리 문제인지 헷갈릴 수 있어."
+            ]
+            today_actions = [
+                "내 잎 앞뒤랑 흙 표면 사진을 한 장씩 남겨줘.",
+                "마지막으로 물 준 날짜와 흙이 마르는 속도를 기록해줘."
+            ]
+            checklist = [
+                "새잎까지 색 변화가 번지는지 봐줘.",
+                "줄기 밑동이 무르거나 흙 냄새가 이상한지 확인해줘."
+            ]
+        else:
+            summary = "현재 질문과 식물 기록만으로는 공식 문서 근거가 충분하지 않아 확정적인 판단은 어렵습니다."
+            possible_causes = [
+                "최근 물주기, 빛, 통풍, 흙 상태 정보가 부족합니다.",
+                "사진이나 재배 일지 없이 증상만으로는 원인 후보를 좁히기 어렵습니다."
+            ]
+            today_actions = [
+                "잎 앞뒤, 줄기 밑동, 흙 표면 사진을 추가로 기록합니다.",
+                "최근 물 준 날짜와 흙이 마르는 속도를 재배 일지에 남깁니다."
+            ]
+            checklist = [
+                "잎 색 변화가 새잎까지 번지는지 확인합니다.",
+                "줄기 밑동이 무르거나 흙 냄새가 나는지 확인합니다."
+            ]
     elif any(token in combined_signal_text for token in ["과습", "물주기", "젖", "축축", "무름", "뿌리"]):
         summary = "입력된 증상과 검색 문서를 보면 과습 또는 배수 불량 가능성을 우선 점검해야 합니다."
         possible_causes = [
@@ -502,6 +685,18 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
             "3~7일 동안 증상이 새잎으로 확산되는지 확인합니다.",
             "물주기 후 회복되는지 또는 더 처지는지 관찰합니다."
         ]
+
+    if is_companion_mode and not summary.startswith("지금은 나("):
+        summary = f"나({plant_label}) 상태를 보면, {summary.replace('입니다.', '인 것 같아.').replace('합니다.', '해줘.')}"
+        possible_causes = [item.replace("가능성", "가능성이 있어").replace("상태", "상태일 수 있어") for item in possible_causes]
+        today_actions = [
+            item.replace("확인합니다.", "확인해줘.").replace("기록합니다.", "기록해줘.").replace("남깁니다.", "남겨줘.").replace("미룹니다.", "미뤄줘.")
+            for item in today_actions
+        ]
+        checklist = [
+            item.replace("확인합니다.", "확인해줘.").replace("관찰합니다.", "관찰해줘.").replace("기록합니다.", "기록해줘.")
+            for item in checklist
+        ]
         
     return {
         "draft_answer": {
@@ -516,8 +711,12 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
 # 8. safety_review 노드
 def safety_review(state: AgentState) -> Dict[str, Any]:
     draft = state["draft_answer"]
+    response_mode = state.get("response_mode") or "expert"
     
-    safety_notice = "본 관리 가이드는 입력된 내용 및 공식 지침서에 기반하여 생성되었으며 특정 질병을 확정하는 것이 아닙니다. 상세 증상이 지속되면 농업기술센터 전문가의 도움을 받으십시오."
+    if response_mode == "companion":
+        safety_notice = "친근한 대화 모드의 답변이지만, 실제 관리는 입력된 내용과 공식 지침서에 기반한 참고 가이드입니다. 증상이 지속되면 전문가 확인을 권장합니다."
+    else:
+        safety_notice = "본 관리 가이드는 입력된 내용 및 공식 지침서에 기반하여 생성되었으며 특정 질병을 확정하는 것이 아닙니다. 상세 증상이 지속되면 농업기술센터 전문가의 도움을 받으십시오."
     
     today_actions = []
     for act in draft["todayActions"]:
@@ -543,83 +742,101 @@ def persist_result(state: AgentState) -> Dict[str, Any]:
     plant_id = state["plant_id"]
     final = state["final_answer"]
     question = state["question"]
-    
-    session_res = None
-    if not state.get("new_session"):
-        session_res = db.table("chat_sessions").select("id,title").eq("user_id", user_id).eq("plant_id", plant_id).order("created_at", desc=True).limit(1).execute()
-    
-    if session_res and session_res.data:
-        session_id = session_res.data[0]["id"]
-        if not session_res.data[0].get("title"):
-            try:
-                db.table("chat_sessions").update({"title": make_session_title(state["plant_data"], question)}).eq("id", session_id).execute()
-            except Exception:
-                pass
-    else:
-        new_session = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "plant_id": plant_id,
-            "title": make_session_title(state["plant_data"], question)
-        }
-        db.table("chat_sessions").insert(new_session).execute()
-        session_id = new_session["id"]
-        
-    user_msg_id = str(uuid.uuid4())
-    user_message_payload = {
-        "id": user_msg_id,
-        "session_id": session_id,
-        "role": "user",
-        "content": {"text": question},
-        "citations": []
-    }
+    response_mode = state.get("response_mode") or "expert"
+    prefix = chat_mode_prefix(response_mode)
+
     try:
-        db.table("chat_messages").insert(user_message_payload).execute()
-    except Exception:
-        db.table("chat_messages").insert({
+        session_res = None
+        if not state.get("new_session"):
+            session_res = (
+                db.table("chat_sessions")
+                .select("id,title")
+                .eq("user_id", user_id)
+                .eq("plant_id", plant_id)
+                .like("title", f"{prefix}%")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+        if session_res and session_res.data:
+            session_id = session_res.data[0]["id"]
+            if not session_res.data[0].get("title"):
+                try:
+                    db.table("chat_sessions").update({"title": make_mode_session_title(state["plant_data"], question, response_mode)}).eq("id", session_id).execute()
+                except Exception:
+                    pass
+        else:
+            new_session = {
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "plant_id": plant_id,
+                "title": make_mode_session_title(state["plant_data"], question, response_mode)
+            }
+            db.table("chat_sessions").insert(new_session).execute()
+            session_id = new_session["id"]
+
+        user_msg_id = str(uuid.uuid4())
+        user_message_payload = {
             "id": user_msg_id,
             "session_id": session_id,
-            "sender": "user",
-            "content": question,
+            "role": "user",
+            "content": {"text": question},
             "citations": []
-        }).execute()
-    
-    ai_msg_id = str(uuid.uuid4())
-    content_text = f"[요약]\n{final['summary']}\n\n[의심 원인]\n" + "\n".join(final['possibleCauses']) + "\n\n[오늘 할 일]\n" + "\n".join(final['todayActions'])
-    
-    db_citations = []
-    for cit in final["citations"]:
-        db_citations.append({
-            "source_id": cit["sourceId"],
-            "title": cit["title"],
-            "url": cit["url"],
-            "publisher": cit["publisher"],
-            "excerpt": cit.get("excerpt"),
-            "section": cit.get("section")
-        })
-        
-    assistant_message_payload = {
-        "id": ai_msg_id,
-        "session_id": session_id,
-        "role": "assistant",
-        "content": {"text": content_text},
-        "citations": db_citations
-    }
-    try:
-        db.table("chat_messages").insert(assistant_message_payload).execute()
-    except Exception:
-        db.table("chat_messages").insert({
+        }
+        try:
+            db.table("chat_messages").insert(user_message_payload).execute()
+        except Exception:
+            db.table("chat_messages").insert({
+                "id": user_msg_id,
+                "session_id": session_id,
+                "sender": "user",
+                "content": question,
+                "citations": []
+            }).execute()
+
+        ai_msg_id = str(uuid.uuid4())
+        content_text = f"[요약]\n{final['summary']}\n\n[의심 원인]\n" + "\n".join(final['possibleCauses']) + "\n\n[오늘 할 일]\n" + "\n".join(final['todayActions'])
+
+        db_citations = []
+        for cit in final["citations"]:
+            db_citations.append({
+                "source_id": cit["sourceId"],
+                "title": cit["title"],
+                "url": cit["url"],
+                "publisher": cit["publisher"],
+                "excerpt": cit.get("excerpt"),
+                "section": cit.get("section")
+            })
+
+        assistant_message_payload = {
             "id": ai_msg_id,
             "session_id": session_id,
-            "sender": "assistant",
-            "content": content_text,
+            "role": "assistant",
+            "content": {"text": content_text},
             "citations": db_citations
-        }).execute()
-    
-    return {
-        "session_id": session_id,
-        "message_id": ai_msg_id
-    }
+        }
+        try:
+            db.table("chat_messages").insert(assistant_message_payload).execute()
+        except Exception:
+            db.table("chat_messages").insert({
+                "id": ai_msg_id,
+                "session_id": session_id,
+                "sender": "assistant",
+                "content": content_text,
+                "citations": db_citations
+            }).execute()
+
+        return {
+            "session_id": session_id,
+            "message_id": ai_msg_id
+        }
+    except Exception as exc:
+        logger.warning("Chat persistence skipped after answer generation: %s", exc)
+        return {
+            "session_id": None,
+            "message_id": None
+        }
 
 def run_rag_workflow(
     db_client: Client,
@@ -628,11 +845,14 @@ def run_rag_workflow(
     care_log_id: Optional[str],
     photo_id: Optional[str],
     question: str,
-    new_session: bool = False
+    new_session: bool = False,
+    response_mode: str = "expert",
+    recent_messages: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     workflow = StateGraph(AgentState)
     
     workflow.add_node("validate_input", validate_input)
+    workflow.add_node("load_chat_history", load_chat_history)
     workflow.add_node("extract_image_signals", extract_image_signals)
     workflow.add_node("summarize_user_context", summarize_user_context)
     workflow.add_node("build_retrieval_query", build_retrieval_query)
@@ -643,7 +863,8 @@ def run_rag_workflow(
     workflow.add_node("persist_result", persist_result)
     
     workflow.set_entry_point("validate_input")
-    workflow.add_edge("validate_input", "extract_image_signals")
+    workflow.add_edge("validate_input", "load_chat_history")
+    workflow.add_edge("load_chat_history", "extract_image_signals")
     workflow.add_edge("extract_image_signals", "summarize_user_context")
     workflow.add_edge("summarize_user_context", "build_retrieval_query")
     workflow.add_edge("build_retrieval_query", "retrieve_docs")
@@ -662,6 +883,8 @@ def run_rag_workflow(
         "care_log_id": care_log_id,
         "photo_id": photo_id,
         "question": question,
+        "response_mode": response_mode if response_mode in {"expert", "companion"} else "expert",
+        "request_chat_history": recent_messages or [],
         "new_session": new_session
     }
     

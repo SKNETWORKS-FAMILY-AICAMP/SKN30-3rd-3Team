@@ -170,6 +170,20 @@ paths:
   /api/v1/chat/sessions:
     get:
       summary: List current user's RAG chat sessions
+      parameters:
+        - name: plantId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: responseMode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [expert, companion]
+          description: expert는 전문가 상담방, companion은 내 식물과 대화하기 상담방만 조회
       responses:
         "200":
           description: List of chat sessions
@@ -387,6 +401,14 @@ components:
         photoId:
           type: string
           format: uuid
+        newSession:
+          type: boolean
+          default: false
+        responseMode:
+          type: string
+          enum: [expert, companion]
+          default: expert
+          description: expert는 전문가 상담 말투, companion은 등록한 식물과 대화하는 친근한 말투
         question:
           type: string
           example: 잎 끝이 마르고 아래쪽 잎이 노랗게 변했어요.
