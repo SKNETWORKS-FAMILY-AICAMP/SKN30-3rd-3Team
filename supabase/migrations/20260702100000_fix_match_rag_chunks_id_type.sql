@@ -1,8 +1,5 @@
--- Apply in Supabase SQL Editor before the next RAG re-ingestion.
--- This keeps existing user data intact and only updates RAG reference tables/functions.
-
-ALTER TABLE public.rag_chunks
-  ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+-- Align match_rag_chunks RPC return type with rag_chunks.chunk_id.
+-- Some deployed schemas store chunk_id as text, so returning UUID breaks pgvector search.
 
 DROP FUNCTION IF EXISTS public.match_rag_chunks(vector, float, int);
 

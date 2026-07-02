@@ -124,7 +124,7 @@ IF NOT EXISTS vector;
       match_count int
     )
     RETURNS TABLE (
-      id UUID,
+      id TEXT,
       source_id TEXT,
       title TEXT,
       url TEXT,
@@ -138,7 +138,7 @@ IF NOT EXISTS vector;
     BEGIN
       RETURN QUERY
       SELECT
-        rag_chunks.chunk_id AS id,
+        rag_chunks.chunk_id::text AS id,
         rag_chunks.source_id::text AS source_id,
         rag_sources.title,
         rag_sources.url,
