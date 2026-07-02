@@ -68,3 +68,8 @@ Thumbs.db
 .idea/
 .vscode/
 !.vscode/extensions.json
+
+
+# 성준이의 개인 파일
+.agents/
+Glossary/

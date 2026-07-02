@@ -95,17 +95,29 @@ def score_text(query_tokens: List[str], text: str, keywords: List[str]) -> float
     return score
 
 
-def merge_results(*groups: List[SearchResult], top_k: int) -> List[SearchResult]:
-    merged: dict[str, SearchResult] = {}
+def merge_results(*groups: List[SearchResult], top_k: int, rrf_k: int = 60) -> List[SearchResult]:
+    # RRF (Reciprocal Rank Fusion) 알고리즘 적용
+    rrf_scores: dict[str, float] = {}
+    merged_results: dict[str, SearchResult] = {}
+    
     for group in groups:
-        for result in group:
+        # group은 이미 자신의 점수로 정렬되어 있다고 가정
+        for rank, result in enumerate(group):
             metadata = result.metadata or {}
             key = str(metadata.get("chunk_id") or metadata.get("id") or result.content[:120])
-            if key in merged:
-                merged[key].score = max(merged[key].score, result.score)
-                continue
-            merged[key] = result
-    return sorted(merged.values(), key=lambda item: item.score, reverse=True)[:top_k]
+            
+            # RRF 점수 누적
+            if key not in rrf_scores:
+                rrf_scores[key] = 0.0
+                merged_results[key] = result
+            
+            rrf_scores[key] += 1.0 / (rank + 1 + rrf_k)
+            
+    # 누적된 RRF 점수로 갱신
+    for key, result in merged_results.items():
+        result.score = rrf_scores[key]
+        
+    return sorted(merged_results.values(), key=lambda item: item.score, reverse=True)[:top_k]
 
 def supabase_keyword_search(query: str, top_k: int = 3) -> List[SearchResult]:
     """
@@ -188,7 +200,7 @@ def fallback_keyword_search(query: str, top_k: int = 3) -> List[SearchResult]:
     results.sort(key=lambda x: x.score, reverse=True)
     return results[:top_k]
 
-def search_documents(query: str, top_k: int = 3) -> List[SearchResult]:
+def search_documents(query: str, top_k: int = 8) -> List[SearchResult]:
     """
     최적의 수단을 사용하여 지침 문서를 검색합니다.
     1순위: OpenAI Embedding + Supabase pgvector RPC 호출

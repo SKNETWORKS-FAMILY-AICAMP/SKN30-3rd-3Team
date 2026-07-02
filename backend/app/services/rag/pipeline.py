@@ -202,10 +202,37 @@ def build_retrieval_query(state: AgentState) -> Dict[str, Any]:
     signals = ", ".join(state["image_signals"])
     context = state.get("user_context", "")
     image_description = state.get("image_description") or ""
-
-    if is_smalltalk_question(question):
-        return {"search_query": ""}
     
+    openai_key = os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY
+    if openai_key:
+        try:
+            import json
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+            prompt = (
+                "당신은 식물 관리 RAG 시스템의 검색 쿼리 생성기입니다. "
+                "주어진 상황에서 가장 관련성 높은 문서를 찾기 위한 검색 키워드 3개를 만드세요. "
+                "JSON 형식으로 {'queries': ['키워드1', '키워드2', '키워드3']} 반환하세요."
+            )
+            res = client.chat.completions.create(
+                model=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"질문: {question}\n식물: {plant.get('species') or plant.get('name')}\n징후: {signals}\n사진: {image_description}"}
+                ]
+            )
+            raw_content = str(res.choices[0].message.content or "").strip()
+            if raw_content.startswith("```"):
+                raw_content = raw_content.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            ans = json.loads(raw_content)
+            queries = ans.get("queries") or []
+            if queries:
+                return {"search_query": " ".join(queries)}
+        except Exception as e:
+            logger.warning("Query expansion failed: %s", e)
+
     query_text = (
         f"식물: {plant.get('species') or plant.get('name')}. "
         f"사용자 질문: {question}. "
@@ -234,8 +261,8 @@ def retrieve_docs(state: AgentState) -> Dict[str, Any]:
     )
     query = compact_query or state["search_query"]
     if not query.strip():
-        return {"retrieved_docs": []}
-    search_results = search_documents(query, top_k=4)
+        query = state["search_query"]
+    search_results = search_documents(query, top_k=8)
     
     docs = []
     for res in search_results:
@@ -249,7 +276,40 @@ def retrieve_docs(state: AgentState) -> Dict[str, Any]:
 # 6. grade_or_rerank 노드
 def grade_or_rerank(state: AgentState) -> Dict[str, Any]:
     docs = state["retrieved_docs"]
-    return {"retrieved_docs": docs}
+    question = state["question"]
+    openai_key = os.getenv("OPENAI_API_KEY") or settings.OPENAI_API_KEY
+    
+    if not openai_key or not docs:
+        return {"retrieved_docs": docs[:4]}
+        
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=openai_key)
+        
+        filtered_docs = []
+        for doc in docs:
+            res = client.chat.completions.create(
+                model=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
+                temperature=0.0,
+                messages=[
+                    {"role": "system", "content": "사용자의 식물 관리 질문에 답하기 위해 주어진 문서가 유용한가요? 관련성이 있다면 'yes', 전혀 무관하다면 'no'만 출력하세요."},
+                    {"role": "user", "content": f"질문: {question}\n\n문서 내용: {doc.get('content')}"}
+                ]
+            )
+            score = str(res.choices[0].message.content or "").strip().lower()
+            if 'yes' in score:
+                filtered_docs.append(doc)
+                if len(filtered_docs) >= 4:
+                    break
+                    
+        # 필터링 후에도 문서가 없으면(모두 no인 경우) 원본 상위 2개라도 살림
+        if not filtered_docs:
+            filtered_docs = docs[:2]
+            
+        return {"retrieved_docs": filtered_docs}
+    except Exception as e:
+        logger.warning("Reranking failed: %s", e)
+        return {"retrieved_docs": docs[:4]}
 
 # 7. generate_answer 노드
 def generate_answer(state: AgentState) -> Dict[str, Any]:
@@ -311,7 +371,8 @@ def generate_answer(state: AgentState) -> Dict[str, Any]:
                         "content": (
                             "당신은 식물 관리 상담을 돕는 AI입니다. 반드시 사용자의 식물 정보, 최근 관리 기록, 검색된 공식 문서만 근거로 답하세요. "
                             "모든 답변은 JSON 객체만 출력합니다. "
-                            "필드: summary(string), possibleCauses(string[]), todayActions(string[]), observationChecklist(string[]). "
+                            "필드: reasoning(string), summary(string), possibleCauses(string[]), todayActions(string[]), observationChecklist(string[]). "
+                            "reasoning 필드에는 증상과 문서를 비교분석하는 '생각의 흐름'을 먼저 서술하세요. "
                             "summary는 한 문단의 자연스러운 상담 말투로 작성하고, todayActions는 사용자가 바로 따라 할 수 있는 구체적인 행동으로 작성하세요. "
                             "질병명 확정, 농약 직접 처방, 과도한 단정은 피하고 '~가능성', '관찰 필요' 중심으로 말하세요. "
                             "사진 분석 결과가 있으면 이를 관찰 근거로 반영하되, 사진만으로 확정 진단하지 마세요. "
