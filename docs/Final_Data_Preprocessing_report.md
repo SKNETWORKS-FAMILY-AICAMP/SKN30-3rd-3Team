@@ -15,21 +15,25 @@
 
 ---
 
-## 📂 2. 수집 및 전처리 대상 데이터셋 명세 (총 600건 + 마스터 시드)
+## 📂 2. 수집 및 전처리 대상 데이터셋 명세 (총 1,000건 + 마스터 시드)
 
-RAG 데이터 파이프라인에 주입된 데이터 출처 및 개별 수집/정제 규칙 요약 테이블은 다음과 같습니다.
+팀 공동 프로젝트 수집 계획에 따라 협업하여 Supabase에 통합 적재를 완료한 데이터 출처 및 가공 규칙 요약 테이블은 다음과 같습니다.
 
-| 데이터 소스명 | 물리 파일명 (Raw CSV) | 레코드 수 | 카테고리 (Category) | 적재 상태 / 범위 | 수집 경로 및 전처리/정제 핵심 규칙 |
+| 데이터 소스명 | 물리 파일명 (Raw CSV 등) | 레코드 수 | 카테고리 (Category) | 적재 상태 / 범위 | 수집 경로 및 전처리/정제 핵심 규칙 |
 | :--- | :--- | :---: | :--- | :---: | :--- |
 | **식물 마스터** | `priority_plant_catalog.jsonl` (Seed) | 60종 | `plant_master` | **별도 테이블 적재** | `build_plant_master.py` 활용 / 학명, 영명, 이명(aliases), 과명 파싱 ➡️ `plant_catalog` 테이블 적재 |
-| **PSIS 농약 정보** | `sample_4_psis_pesticide_60plants_raw.csv` | 100건 | `pesticide_safety` | **1차 실적재 완료** | 적용 약제 및 안전 희석 배수 추출 ➡️ 본문 내 방제 언급 시 `pesticide_caution` 태그 자동 주입 |
-| **AI Hub 이미지 메타** | `sample_5_image_manifest_60plants_raw.csv` | 100건 | `weather_context` | **1차 실적재 완료** | 센서 라벨(수분, 관수 상태) 및 육묘 단계 JSON 텍스트 추출 ➡️ RAG 보조 데이터로 정제 |
-| **기상 스트레스 가이드** | `sample_6_weather_disease_risk_60plants_raw.csv` | 100건 | `weather_context` | **1차 실적재 완료** | 기온/광도 임계점 매핑 ➡️ 식물 기후 위해 분석 가이드 및 행동 요령 텍스트화 |
-| **경기농기원 보고서** | `sample_gyeonggido_agri_pdf_raw.csv` | 100건 | `crop_care` | **1차 실적재 완료** | 연구 보고서 PDF 자료실 연동 ➡️ 본문 텍스트 추출 및 핵심 메타 주입 (`observation_reference_only`) |
-| **국립수목원 식물도감** | `sample_national_botanic_garden_raw.csv` | 100건 | `indoor_care` | **1차 실적재 완료** | OpenAPI 연동 ➡️ 잎/꽃 형태 정보 등 특징 텍스트 추출, 표준 학명/과명 분류 매핑 |
-| **농사로 기술 정보** | `sample_special_crops_tech_raw.csv` | 100건 | `crop_care` | **1차 실적재 완료** | `cropEbook API` 및 `farmTechMain` 상세 웹페이지 병합 ➡️ 지침서 정규화 |
-| **농작업 일정 HWPX** | `WeeklyFarming (HWPX 원본)` | - | `crop_growth_stage` | *추후 확장 예정* | HWPX XML 문단/표 디코딩 ➡️ 정형 표는 문장형 변환, 비정형 표는 행 구조 텍스트 보존 파싱 |
-| **네이버 지식백과** | `(보조 지식 문서)` | - | `indoor_care` | *추후 확장 예정* | 백과사전 API 추출 대상 중 사람의 수동 검수(`manual_url`)를 거친 웹 페이지만 수집 |
+| **농사로 작목 정보** | `sample_special_crops_tech_raw.csv` | 268건 | `crop_care` | **공동 적재 완료** | `cropEbook API` 및 `farmTechMain` 상세 웹페이지 병합 ➡️ 지침서 정규화 |
+| **농작업 일정 HWPX** | `WeeklyFarming (HWPX 원본)` | 235건 | `crop_growth_stage` | **공동 적재 완료** | HWPX XML 문단/표 디코딩 ➡️ 정형 표는 문장형 변환, 비정형 표는 행 구조 텍스트 보존 파싱 |
+| **농사로 작물 전자책** | `sample_nongsaro_crop_ebook_raw.csv` | 100건 | `crop_care` | **공동 적재 완료** | `cropEbook API`를 활용한 작물 인덱스 및 영상/품종 목차 RAG 데이터화 |
+| **국립수목원 식물도감** | `sample_national_botanic_garden_raw.csv` | 100건 | `indoor_care` | **공동 적재 완료** | OpenAPI 연동 ➡️ 잎/꽃 형태 정보 등 특징 텍스트 추출, 표준 학명/과명 분류 매핑 |
+| **경기농기원 보고서** | `sample_gyeonggido_agri_pdf_raw.csv` | 100건 | `crop_care` | **공동 적재 완료** | 연구 보고서 PDF 자료실 연동 ➡️ 본문 텍스트 추출 및 핵심 메타 주입 (`observation_reference_only`) |
+| **기상 스트레스 가이드** | `sample_6_weather_disease_risk_60plants_raw.csv` | 100건 | `weather_context` | **공동 적재 완료** | 기온/광도 임계점 매핑 ➡️ 식물 기후 위해 분석 가이드 및 행동 요령 텍스트화 |
+| **AI Hub 이미지 메타** | `sample_5_image_manifest_60plants_raw.csv` | 100건 | `weather_context` | **공동 적재 완료** | 센서 라벨(수분, 관수 상태) 및 육묘 단계 JSON 텍스트 추출 ➡️ RAG 보조 데이터로 정제 |
+| **PSIS 농약 정보** | `sample_4_psis_pesticide_60plants_raw.csv` | 82건 | `pesticide_safety` | **공동 적재 완료** | 적용 약제 및 안전 희석 배수 추출 ➡️ 본문 내 방제 언급 시 `pesticide_caution` 태그 자동 주입 |
+| **NCPMS 병해충 정보** | `sample_ncpms_pest_reference_raw.csv` | 59건 | `pest_reference` | **공동 적재 완료** | 병해충 검색 및 상세 API 연동 ➡️ 증상 메타 매핑 및 상담 사례 `expert_case_reference` 격리 |
+| **네이버 지식백과** | `(보조 지식 문서)` | 8건 | `indoor_care` | **공동 적재 완료** | 백과사전 API 추출 대상 중 사람의 수동 검수(`manual_url`)를 거친 웹 페이지만 Playwright 렌더링 수집 |
+| **AI Hub 생육/관수** | `(보조 지식 문서)` | 10건 | `indoor_care / crop_growth` | **공동 적재 완료** | 원예식물 화분류 물주기 수분 데이터 및 육묘 생장데이터 라벨 JSON 요약본 RAG화 |
+| **NCPMS API 가이드** | `(API 참고 데이터)` | 2건 | `pest_reference` | **공동 적재 완료** | 병/해충/상담 검색 상세 API의 스키마 명세 및 요청/응답 사양 RAG 참고 데이터 적재 |
 
 ---
 
@@ -145,15 +149,22 @@ data/
     *   `pesticide_safety` 카테고리 데이터에 `pesticide_caution` 안전 주의 태그가 강제 주입되었는지 검증 완료.
 
 ### 6.2 데이터 소스별 최종 적재량 검증 (Supabase 로드 완료 팩트)
-*   **전체 적재 완료 청크 수**: **1,000건** (기존 DB RAG 데이터 400건 + 이번 파이프라인 신규 6대 소스 600건 완벽 합산 적재 완료)
+*   **전체 적재 완료 청크 수**: **1,000건** (팀 협업 수집 계획에 따라 총 13개 세부 데이터 소스를 통해 Supabase DB에 최종 통합 적재 완료)
 
-| 실제 출처 UUID (`source_id`) | 출처 키 (`source_key`) | 적재 수량 | category 구분 | usage_scope 적용 |
+| 실제 출처 UUID (`source_id`) | 출처 키 (`source_key`) / 출처명 | 적재 수량 | category 구분 | usage_scope 적용 |
 | :--- | :--- | :---: | :--- | :--- |
-| `3fe65151-5be8-53bf-bc6c-b1128d78ba15` | `psis_pesticide_safety` | 100건 | `pesticide_safety` | `safety_reference_only` |
-| `0384cc48-1038-5213-86e2-dbdb2c9c36a6` | `aihub_agriculture_datasets` | 100건 | `weather_context` | `reference_only` |
-| `b95e6513-4ca9-53d8-88c5-5745662766c6` | `rda_weather365` | 100건 | `weather_context` | `reference_only` |
-| `2d0a2016-f2f1-523b-bd19-e05beac2d904` | `gyeonggido_agri` | 100건 | `crop_care` | `rag` |
-| `50f6d3ff-9aac-5d2a-b9ed-5ea7427533d7` | `national_botanic_garden` | 100건 | `indoor_care` | `rag` |
-| `c5430459-dec8-5622-97b8-6553428594f2` | `nongsaro_crop_ebook` | 100건 | `crop_care` | `rag_and_catalog` |
+| `5d1b013e-d5c5-5bf4-9df7-3b386bdd55ae` | `nongsaro_crop_tech` (농사로 작목 정보) | 268건 | `crop_care` | `rag` |
+| `94847612-80e8-5db4-8d80-9e25439283ab` | `weekly_farming_info` (농사로 농작업 일정) | 235건 | `crop_growth_stage` | `context_later` |
+| `c5430459-dec8-5622-97b8-6553428594f2` | `nongsaro_crop_ebook` (농사로 작목 전자책) | 100건 | `crop_care` | `rag_and_catalog` |
+| `50f6d3ff-9aac-5d2a-b9ed-5ea7427533d7` | `national_botanic_garden` (국립수목원 도감) | 100건 | `indoor_care` | `rag` |
+| `0384cc48-1038-5213-86e2-dbdb2c9c36a6` | `aihub_agriculture_datasets` (AI Hub 이미지메타) | 100건 | `weather_context` | `reference_only` |
+| `2d0a2016-f2f1-523b-bd19-e05beac2d904` | `gyeonggido_agri` (경기농기원 보고서) | 100건 | `crop_care` | `rag` |
+| `3fe65151-5be8-53bf-bc6c-b1128d78ba15` | `psis_pesticide_safety` (PSIS 농약 정보) | 82건 | `pesticide_safety` | `safety_reference_only` |
+| `5ca212d3-9842-5c42-ab5f-089796d177c1` | `ncpms_pest_reference` (NCPMS 병해충 정보) | 59건 | `pest_reference` | `reference_only` |
+| `834c02cc-a5fe-5bfc-81f0-50d4f0412e93` | `aihub_pest_classification` (AI Hub 병해충 분류) | 36건 | `pest_reference` | `reference_only` |
+| `55087ab2-5665-5d47-a66a-5e1dd0cd1fe9` | `naver_encyclopedia` (네이버 지식백과) | 8건 | `indoor_care` | `rag` |
+| `367d9495-aa11-52f6-b42e-b97eb6ad79a4` | `aihub_seedling_growth` (AI Hub 육묘생장 데이터) | 7건 | `crop_growth_stage` | `rag_and_image_manifest` |
+| `651507af-3718-5974-87f7-3a77f85290ee` | `aihub_horticulture_watering` (AI Hub 물주기) | 3건 | `indoor_care` | `rag_and_image_manifest` |
+| `16d08105-0476-5584-9e07-6a91f1e82966` | `ncpms_openapi_guide` (NCPMS API 가이드) | 2건 | `pest_reference` | `api_contract_reference` |
 
 본 보고서에 명시된 모든 전처리 흐름 및 가공 규격은 수동 검수 및 자동 검증 스크립트를 통해 무결성이 입증되었으며, 원격 Supabase DB 테이블과의 연동 적재가 최종 완수되었습니다.
