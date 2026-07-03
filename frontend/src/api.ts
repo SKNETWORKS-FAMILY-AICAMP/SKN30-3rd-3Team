@@ -204,6 +204,17 @@ export async function updatePlant(
   });
 }
 
+export async function deletePlant(plantId: string): Promise<void> {
+  if (!hasSupabaseAuthConfig()) {
+    saveLocalPlants(loadLocalPlants().filter((plant) => plant.id !== plantId));
+    return;
+  }
+
+  await request<void>(`/api/v1/plants/${plantId}`, {
+    method: "DELETE"
+  });
+}
+
 export async function createPlant(input: Pick<Plant, "name" | "species" | "location" | "sunlight">): Promise<Plant> {
   if (!hasSupabaseAuthConfig()) {
     const plant: Plant = {

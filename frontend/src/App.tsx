@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   askPlantCare,
+  clearAuthSession,
   createCareLog,
   createPlant,
+  deletePlant,
   getAccessToken,
   getChatModelInfo,
   getPlant,
@@ -53,6 +55,7 @@ const LAST_SESSION_ID_KEY = "farmhani_last_session_id";
 const PENDING_DIAGNOSIS_QUESTION_KEY = "farmhani_pending_diagnosis_question";
 const CHAT_RESPONSE_MODE_KEY = "farmhani_chat_response_mode";
 const CHAT_MEMORY_KEY = "farmhani_chat_memory";
+const USER_PROFILE_PHOTO_KEY = "farmhani_user_profile_photo";
 
 const defaultPlantImages = [
   "https://images.unsplash.com/photo-1614594975525-e45190c55d0b?auto=format&fit=crop&w=1200&q=80",
@@ -161,6 +164,23 @@ function createHiddenFileInput(doc: Document) {
   return input;
 }
 
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function getUserProfilePhoto() {
+  return localStorage.getItem(USER_PROFILE_PHOTO_KEY) || "";
+}
+
+function setUserProfilePhoto(value: string) {
+  if (value) localStorage.setItem(USER_PROFILE_PHOTO_KEY, value);
+}
+
 function removeCategoryAddButtons(doc: Document) {
   doc.querySelectorAll("button").forEach((button) => {
     const text = normalizedText(button);
@@ -168,6 +188,32 @@ function removeCategoryAddButtons(doc: Document) {
       button.remove();
     }
   });
+}
+
+function removeChatConfidence(doc: Document) {
+  Array.from(doc.querySelectorAll("p, span")).forEach((element) => {
+    const text = normalizedText(element);
+    if (text.includes("분석 확신도") || (text.includes("87%") && text.includes("확신"))) {
+      element.remove();
+    }
+  });
+}
+
+function simplifyDashboardViewButtons(doc: Document) {
+  const listButton = Array.from(doc.querySelectorAll("button")).find((button) => normalizedText(button).includes("view_list"));
+  listButton?.remove();
+
+  const gridButton = Array.from(doc.querySelectorAll("button")).find((button) => normalizedText(button).includes("grid_view")) as HTMLElement | undefined;
+  if (!gridButton || gridButton.dataset.viewButtonsSimplified === "true") return;
+  gridButton.dataset.viewButtonsSimplified = "true";
+  gridButton.setAttribute("title", "카드 보기");
+  gridButton.addEventListener("click", (event) => {
+    event.preventDefault();
+  });
+}
+
+function removeAddPhotoSkipButton(doc: Document) {
+  doc.getElementById("skip-btn")?.remove();
 }
 
 function findPlantGrid(doc: Document) {
@@ -269,6 +315,28 @@ function App() {
     return false;
   }
 
+  async function removePlant(doc: Document, plantId: string) {
+    const ok = doc.defaultView?.confirm("이 식물을 삭제할까요? 관리 기록과 상담 연결 정보도 더 이상 목록에서 보이지 않습니다.");
+    if (!ok) return;
+
+    try {
+      await deletePlant(plantId);
+      if (getSelectedPlantId() === plantId) {
+        localStorage.removeItem(SELECTED_PLANT_ID_KEY);
+      }
+      frameAlert(doc, "식물을 삭제했습니다.");
+      if (page === "detail") {
+        navigate("dashboard");
+        return;
+      }
+      void bindDashboardData(doc);
+    } catch (error) {
+      if (!handleApiError(doc, error)) {
+        frameAlert(doc, `식물 삭제에 실패했습니다. ${error instanceof Error ? error.message : ""}`);
+      }
+    }
+  }
+
   async function resolvePlantId(doc: Document) {
     const selected = getSelectedPlantId();
     if (selected) return selected;
@@ -292,12 +360,39 @@ function App() {
     if (!submit) return;
 
     let isLogin = true;
+    let selectedProfilePhoto: File | null = null;
+    const profileUpload = doc.createElement("div");
+    profileUpload.dataset.profileUpload = "true";
+    profileUpload.className = "hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-3";
+    profileUpload.innerHTML = `
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-label-md font-bold text-on-surface">프로필 사진</p>
+          <p class="text-label-sm text-on-surface-variant">가입 후 상단 네비게이션에 표시됩니다.</p>
+        </div>
+        <button type="button" class="px-3 py-2 rounded-full bg-growth-light text-primary text-label-sm font-bold" data-profile-photo-pick>사진 선택</button>
+      </div>
+      <p class="text-label-sm text-outline" data-profile-photo-label>선택된 사진 없음</p>`;
+    const authFormHost = submit.parentElement;
+    authFormHost?.insertBefore(profileUpload, submit);
+    const profileInput = createHiddenFileInput(doc);
+    profileUpload.querySelector("[data-profile-photo-pick]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      profileInput.click();
+    });
+    profileInput.addEventListener("change", () => {
+      selectedProfilePhoto = profileInput.files?.[0] ?? null;
+      const label = profileUpload.querySelector("[data-profile-photo-label]");
+      if (label) label.textContent = selectedProfilePhoto ? selectedProfilePhoto.name : "선택된 사진 없음";
+    });
+
     if (toggle) {
       const cleanToggle = toggle.cloneNode(true) as HTMLButtonElement;
       toggle.replaceWith(cleanToggle);
       cleanToggle.addEventListener("click", (event) => {
         event.preventDefault();
         isLogin = !isLogin;
+        profileUpload.classList.toggle("hidden", isLogin);
         const title = doc.querySelector("h2");
         const subtitle = title?.nextElementSibling;
         if (title) title.textContent = isLogin ? "시작하기" : "회원가입";
@@ -321,6 +416,9 @@ function App() {
       event.preventDefault();
 
       if (!hasSupabaseAuthConfig()) {
+        if (!isLogin && selectedProfilePhoto) {
+          setUserProfilePhoto(await fileToDataUrl(selectedProfilePhoto));
+        }
         navigate("dashboard");
         return;
       }
@@ -341,6 +439,9 @@ function App() {
         }
 
         const result = await signUpWithPassword(emailValue, passwordValue);
+        if (selectedProfilePhoto) {
+          setUserProfilePhoto(await fileToDataUrl(selectedProfilePhoto));
+        }
         if (!result.access_token) {
           frameAlert(doc, "회원가입은 완료됐지만 세션이 발급되지 않았습니다. Supabase 이메일 인증을 완료한 뒤 로그인해 주세요.");
           isLogin = true;
@@ -543,8 +644,24 @@ function App() {
 
     grid.innerHTML = `${plants.map((plant, index) => plantCardHtml(plant, index)).join("")}${addPlantCardHtml()}`;
     grid.querySelectorAll("[data-plant-card]").forEach((card) => {
+      const plantId = (card as HTMLElement).dataset.plantCard;
+      const imageArea = card.querySelector(".relative") as HTMLElement | null;
+      if (plantId && imageArea && !imageArea.querySelector("[data-delete-plant]")) {
+        const deleteButton = doc.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.dataset.deletePlant = plantId;
+        deleteButton.title = "식물 삭제";
+        deleteButton.className =
+          "absolute top-4 left-4 w-9 h-9 rounded-full bg-white/85 text-diagnostic-red backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-diagnostic-red hover:text-white transition-all";
+        deleteButton.innerHTML = '<span class="material-symbols-outlined text-[18px]">delete</span>';
+        deleteButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void removePlant(doc, plantId);
+        });
+        imageArea.appendChild(deleteButton);
+      }
       card.addEventListener("click", () => {
-        const plantId = (card as HTMLElement).dataset.plantCard;
         if (plantId) {
           setSelectedPlantId(plantId);
           navigate("detail");
@@ -933,6 +1050,55 @@ function App() {
     });
   }
 
+  function bindSessionControls(doc: Document) {
+    if (page === "login" || doc.querySelector("[data-session-controls]")) return;
+    const header = doc.querySelector("header");
+    if (!header) return;
+
+    const rightArea =
+      (Array.from(header.querySelectorAll(".flex.items-center.gap-4")).pop() as HTMLElement | undefined) ||
+      (header.lastElementChild as HTMLElement | null);
+    if (!rightArea) return;
+
+    const storedPhoto = getUserProfilePhoto();
+    const existingProfileImage = rightArea.querySelector("img") as HTMLImageElement | null;
+    if (existingProfileImage && storedPhoto) {
+      existingProfileImage.src = storedPhoto;
+      existingProfileImage.alt = "사용자 프로필 사진";
+    }
+
+    const isLoggedIn = hasAuthSession() || !hasSupabaseAuthConfig();
+    const wrapper = doc.createElement("div");
+    wrapper.dataset.sessionControls = "true";
+    wrapper.className = "flex items-center gap-2";
+
+    if (!existingProfileImage) {
+      const avatar = doc.createElement("div");
+      avatar.className =
+        "w-8 h-8 rounded-full bg-primary-fixed-dim flex items-center justify-center overflow-hidden border border-outline-variant/20";
+      avatar.innerHTML = storedPhoto
+        ? `<img alt="사용자 프로필 사진" class="w-full h-full object-cover" src="${escapeHtml(storedPhoto)}">`
+        : '<span class="material-symbols-outlined text-primary text-[18px]">person</span>';
+      wrapper.appendChild(avatar);
+    }
+
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className =
+      "px-3 py-2 rounded-full bg-surface-container-high text-on-surface text-label-sm font-bold border border-outline-variant/20 hover:bg-growth-light hover:text-primary transition-all";
+    button.textContent = isLoggedIn ? "로그아웃" : "로그인";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (isLoggedIn) {
+        clearAuthSession();
+        frameAlert(doc, "로그아웃되었습니다.");
+      }
+      navigate("login");
+    });
+    wrapper.appendChild(button);
+    rightArea.appendChild(wrapper);
+  }
+
   function bindDetailSidebar(doc: Document) {
     const items = Array.from(doc.querySelectorAll("aside nav > div")) as HTMLElement[];
     items.forEach((item) => {
@@ -1020,6 +1186,22 @@ function App() {
         navigate("add");
       });
     }
+  }
+
+  function bindDetailDeleteButton(doc: Document) {
+    if (doc.querySelector("[data-detail-delete-plant]")) return;
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.dataset.detailDeletePlant = "true";
+    button.className =
+      "fixed right-6 bottom-6 z-50 inline-flex items-center gap-2 rounded-full bg-diagnostic-red text-white px-4 py-3 text-label-md font-bold shadow-lg hover:brightness-95 transition-all";
+    button.innerHTML = '<span class="material-symbols-outlined text-[18px]">delete</span>식물 삭제';
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      const plantId = getSelectedPlantId();
+      if (plantId) void removePlant(doc, plantId);
+    });
+    doc.body.appendChild(button);
   }
 
   async function bindDashboardData(doc: Document) {
@@ -2017,18 +2199,22 @@ function App() {
     }
 
     removeCategoryAddButtons(doc);
+    removeChatConfidence(doc);
     bindGenericControls(doc);
     bindFrameNavigation(doc);
     bindLogoHome(doc);
+    bindSessionControls(doc);
     bindTopSearch(doc);
     if (page === "login") bindAuth(doc);
     if (page === "dashboard") {
+      simplifyDashboardViewButtons(doc);
       void bindDashboardData(doc);
       bindDashboardUpload(doc);
     }
     if (page === "add") {
       profilePhotoRef.current = null;
       selectedSpeciesRef.current = "";
+      removeAddPhotoSkipButton(doc);
       bindSpeciesAutocomplete(doc);
       bindAddDateShortcuts(doc);
       bindAddPhotoPicker(doc);
@@ -2039,6 +2225,7 @@ function App() {
       bindDetailSidebar(doc);
       renderDetailCollectionSidebar(doc);
       bindQuickCareButtons(doc);
+      bindDetailDeleteButton(doc);
     }
     if (page === "chat") {
       bindChatModelInfo(doc);
