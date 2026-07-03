@@ -19,16 +19,17 @@
 
 RAG 데이터 파이프라인에 주입된 데이터 출처 및 개별 수집/정제 규칙 요약 테이블은 다음과 같습니다.
 
-| 데이터 소스명 | 물리 파일명 (Raw CSV) | 레코드 수 | 카테고리 (Category) | 적재 상태 / 범위 | 수집 경로 및 전처리/정제 핵심 규칙 |
+| 데이터 소스명 | 물리 파일명 | 레코드 수 | 카테고리 (Category) | 적재 상태 / 범위 | 수집 경로 및 전처리/정제 핵심 규칙 |
 | :--- | :--- | :---: | :--- | :---: | :--- |
-| **식물 마스터** | `priority_plant_catalog.jsonl` (Seed) | 60종 | `plant_master` | **별도 테이블 적재** | `build_plant_master.py` 활용 / 학명, 영명, 이명(aliases), 과명 파싱 ➡️ `plant_catalog` 테이블 적재 |
+| **식물 마스터** | `priority_plant_catalog.jsonl` (Seed) | 65종 | `plant_master` | **별도 테이블 적재** | `build_plant_master.py` 활용 / 학명, 영명, 이명(aliases), 과명 파싱 ➡️ `plant_catalog` 테이블 적재 |
 | **PSIS 농약 정보** | `sample_4_psis_pesticide_60plants_raw.csv` | 100건 | `pesticide_safety` | **1차 실적재 완료** | 적용 약제 및 안전 희석 배수 추출 ➡️ 본문 내 방제 언급 시 `pesticide_caution` 태그 자동 주입 |
 | **AI Hub 이미지 메타** | `sample_5_image_manifest_60plants_raw.csv` | 100건 | `weather_context` | **1차 실적재 완료** | 센서 라벨(수분, 관수 상태) 및 육묘 단계 JSON 텍스트 추출 ➡️ RAG 보조 데이터로 정제 |
 | **기상 스트레스 가이드** | `sample_6_weather_disease_risk_60plants_raw.csv` | 100건 | `weather_context` | **1차 실적재 완료** | 기온/광도 임계점 매핑 ➡️ 식물 기후 위해 분석 가이드 및 행동 요령 텍스트화 |
 | **국립수목원 식물도감** | `sample_national_botanic_garden_raw.csv` | 100건 | `indoor_care` | **1차 실적재 완료** | OpenAPI 연동 ➡️ 잎/꽃 형태 정보 등 특징 텍스트 추출, 표준 학명/과명 분류 매핑 |
-| **농사로 기술 정보** | `sample_special_crops_tech_raw.csv` | 100건 | `crop_care` | **1차 실적재 완료** | `cropEbook API` 및 `farmTechMain` 상세 웹페이지 병합 ➡️ 지침서 정규화 |
-| **농작업 일정 HWPX** | `WeeklyFarming (HWPX 원본)` | - | `crop_growth_stage` | *추후 확장 예정* | HWPX XML 문단/표 디코딩 ➡️ 정형 표는 문장형 변환, 비정형 표는 행 구조 텍스트 보존 파싱 |
-| **네이버 지식백과** | `(보조 지식 문서)` | - | `indoor_care` | *추후 확장 예정* | 백과사전 API 추출 대상 중 사람의 수동 검수(`manual_url`)를 거친 웹 페이지만 수집 |
+| **농사로 작물/실내식물 정보** | `crop_farmtech_sections.json` | 14건 | `crop_care` | **1차 실적재 완료** | 농사로 `farmTechMain` 기반 작물 후보 수집 ➡️ 작물 코드, 상세 URL, 재배/병해충 관련 섹션 정보 구조화 |
+| **농사로 작업일정 정보** | `nongsaro_work_documents.reparsed_from_hwpx.jsonl` | 132건 | `nongsaro_work_schedule` | **1차 실적재 완료** | HWPX XML 문단/표 재파싱 ➡️ 정형 표는 문장형 텍스트로 변환, 비정형 표는 행 구조를 보존하여 RAG용 `text`로 재구성 |
+| **네이버 지식백과 보조 문서** | `naver_ency_preprocessed.jsonl` | 문서 33건 | `naver_encyclopedia` | **1차 실적재 완료** | API 호출 URL + 수동 검수 기반 본문 수집 ➡️ 제목, 본문, 출처, 작물명을 포함한 보조 지식 문서로 정규화 |
+| **NCPMS 병해충 참고 정보** | `ncpms_pest_reference.jsonl` | 문서 382건 | `pest_reference` | **1차 실적재 완료** | 병 데이터와 해충 데이터를 단일 JSONL로 통합 ➡️ 작물명, 병해충명, 발생 조건, 증상/피해, 예방 정보를 `text`에 포함하고, `crop_or_plant`는 원본 작물 기준으로 유지하여 정규화  |
 
 ---
 
