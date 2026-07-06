@@ -152,12 +152,22 @@ def list_chat_sessions(
     db: Client = Depends(get_supabase_client)
 ):
     try:
-        query = db.table("chat_sessions").select("*").eq("user_id", str(current_user_id))
-        if plantId:
-            query = query.eq("plant_id", str(plantId))
-        if responseMode:
-            query = query.like("title", f"{chat_mode_prefix(responseMode)}%")
-        response = query.order("created_at", desc=True).execute()
+        def build_query(use_mode_column: bool):
+            query = db.table("chat_sessions").select("*").eq("user_id", str(current_user_id))
+            if plantId:
+                query = query.eq("plant_id", str(plantId))
+            if responseMode:
+                if use_mode_column:
+                    query = query.eq("response_mode", responseMode)
+                else:
+                    query = query.like("title", f"{chat_mode_prefix(responseMode)}%")
+            return query.order("created_at", desc=True)
+
+        try:
+            response = build_query(use_mode_column=True).execute()
+        except Exception:
+            # response_mode 컬럼 미적용(마이그레이션 전) 환경: title 접두사로 폴백
+            response = build_query(use_mode_column=False).execute()
         sessions = []
         for item in response.data:
             sessions.append(ChatSession(

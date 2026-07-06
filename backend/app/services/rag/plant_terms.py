@@ -55,15 +55,25 @@ _SCIENTIFIC_STOPWORDS = {"var", "spp", "sp", "subsp", "cv", "hybrid", "x"}
 _lock = threading.Lock()
 _cache_terms: Set[str] = set()
 _cache_aliases: Dict[str, str] = {}
+# 도감 물주기 간격 항목: (국문명 소문자, 국문명 첫 토큰 소문자, 학명 소문자, 간격일)
+_cache_watering: list = []
 _cache_loaded_at: float = 0.0
 
 
-def _load_from_catalog() -> tuple[Set[str], Dict[str, str]]:
+def _load_from_catalog() -> tuple[Set[str], Dict[str, str], list]:
     from app.db import session
 
-    response = session.supabase.table("plant_catalog").select("name,species").execute()
+    try:
+        response = session.supabase.table("plant_catalog").select(
+            "name,species,watering_interval_days"
+        ).execute()
+    except Exception:
+        # watering_interval_days 컬럼 미적용(마이그레이션 전) 환경
+        response = session.supabase.table("plant_catalog").select("name,species").execute()
+
     terms: Set[str] = set(DEFAULT_PLANT_TERMS)
     aliases: Dict[str, str] = dict(DEFAULT_PLANT_ALIASES)
+    watering: list = []
 
     for row in response.data or []:
         name = str(row.get("name") or "").strip()
@@ -80,11 +90,14 @@ def _load_from_catalog() -> tuple[Set[str], Dict[str, str]]:
             word_lower = word.strip().lower()
             if len(word_lower) >= 3 and word_lower not in _SCIENTIFIC_STOPWORDS:
                 aliases.setdefault(word_lower, first_token)
-    return terms, aliases
+        interval = row.get("watering_interval_days")
+        if isinstance(interval, int) and interval > 0:
+            watering.append((name.lower(), first_token.lower(), species.lower(), interval))
+    return terms, aliases, watering
 
 
 def _refresh_if_stale() -> None:
-    global _cache_terms, _cache_aliases, _cache_loaded_at
+    global _cache_terms, _cache_aliases, _cache_watering, _cache_loaded_at
     now = time.monotonic()
     if _cache_terms and now - _cache_loaded_at < CACHE_TTL_SECONDS:
         return
@@ -92,11 +105,15 @@ def _refresh_if_stale() -> None:
         if _cache_terms and time.monotonic() - _cache_loaded_at < CACHE_TTL_SECONDS:
             return
         try:
-            terms, aliases = _load_from_catalog()
+            terms, aliases, watering = _load_from_catalog()
             _cache_terms = terms
             _cache_aliases = aliases
+            _cache_watering = watering
             _cache_loaded_at = time.monotonic()
-            logger.info("plant_catalog 사전 로드 완료: 용어 %d개, 별칭 %d개", len(terms), len(aliases))
+            logger.info(
+                "plant_catalog 사전 로드 완료: 용어 %d개, 별칭 %d개, 물주기 항목 %d개",
+                len(terms), len(aliases), len(watering)
+            )
         except Exception as exc:
             logger.warning("plant_catalog 사전 로드 실패, 기본 사전 사용: %s", exc)
             if not _cache_terms:
@@ -114,3 +131,22 @@ def get_plant_terms() -> Set[str]:
 def get_plant_aliases() -> Dict[str, str]:
     _refresh_if_stale()
     return _cache_aliases
+
+
+def find_catalog_watering_interval(name: str | None, species: str | None) -> int | None:
+    """
+    도감(plant_catalog)에서 이 식물에 해당하는 권장 물주기 간격을 찾는다.
+    이름/품종 문자열과 도감 국문명·학명의 포함 관계로 매칭하며, 없으면 None.
+    """
+    _refresh_if_stale()
+    haystack = f"{name or ''} {species or ''}".strip().lower()
+    if not haystack:
+        return None
+    for catalog_name, first_token, catalog_species, interval in _cache_watering:
+        if catalog_name and catalog_name in haystack:
+            return interval
+        if first_token and len(first_token) >= 2 and first_token in haystack:
+            return interval
+        if catalog_species and catalog_species in haystack:
+            return interval
+    return None

@@ -807,16 +807,29 @@ def persist_result(state: AgentState) -> Dict[str, Any]:
             except Exception:
                 pass
         elif not state.get("new_session"):
-            session_res = (
-                db.table("chat_sessions")
-                .select("id,title")
-                .eq("user_id", user_id)
-                .eq("plant_id", plant_id)
-                .like("title", f"{prefix}%")
-                .order("created_at", desc=True)
-                .limit(1)
-                .execute()
-            )
+            try:
+                session_res = (
+                    db.table("chat_sessions")
+                    .select("id,title")
+                    .eq("user_id", user_id)
+                    .eq("plant_id", plant_id)
+                    .eq("response_mode", response_mode)
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+            except Exception:
+                # response_mode 컬럼 미적용(마이그레이션 전) 환경: title 접두사로 폴백
+                session_res = (
+                    db.table("chat_sessions")
+                    .select("id,title")
+                    .eq("user_id", user_id)
+                    .eq("plant_id", plant_id)
+                    .like("title", f"{prefix}%")
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
 
         if session_id:
             pass
@@ -832,9 +845,15 @@ def persist_result(state: AgentState) -> Dict[str, Any]:
                 "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "plant_id": plant_id,
-                "title": make_mode_session_title(state["plant_data"], question, response_mode)
+                "title": make_mode_session_title(state["plant_data"], question, response_mode),
+                "response_mode": response_mode
             }
-            db.table("chat_sessions").insert(new_session).execute()
+            try:
+                db.table("chat_sessions").insert(new_session).execute()
+            except Exception:
+                # response_mode 컬럼 미적용(마이그레이션 전) 환경 폴백
+                new_session.pop("response_mode", None)
+                db.table("chat_sessions").insert(new_session).execute()
             session_id = new_session["id"]
 
         user_msg_id = str(uuid.uuid4())

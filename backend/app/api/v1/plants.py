@@ -58,6 +58,15 @@ WATERING_INTERVAL_RULES: list[tuple[int, tuple[str, ...]]] = [
 
 
 def watering_interval_days(name: str | None, species: str | None) -> int:
+    # 1순위: 도감(plant_catalog.watering_interval_days) 매칭
+    try:
+        from app.services.rag.plant_terms import find_catalog_watering_interval
+        catalog_interval = find_catalog_watering_interval(name, species)
+        if catalog_interval:
+            return catalog_interval
+    except Exception:
+        logger.warning("도감 물주기 간격 조회 실패, 키워드 규칙 사용", exc_info=True)
+    # 2순위: 키워드 규칙
     haystack = f"{name or ''} {species or ''}".lower()
     for days, keywords in WATERING_INTERVAL_RULES:
         if any(keyword in haystack for keyword in keywords):
