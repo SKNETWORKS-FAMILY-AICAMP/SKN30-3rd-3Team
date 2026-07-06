@@ -29,14 +29,14 @@ def fallback_session_title(db: Client, plant_id: str | None, created_at: str) ->
         return "식물 상담"
 
 @router.get("/model-info", response_model=ChatModelInfo, summary="식물 상담 AI 모델 정보 조회")
-async def get_chat_model_info():
+def get_chat_model_info():
     return ChatModelInfo(
         chatModel=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
         visionModel=os.getenv("VISION_MODEL") or settings.VISION_MODEL
     )
 
 @router.post("/plant-care", response_model=PlantCareChatResponse, status_code=status.HTTP_200_OK, summary="식물 케어 RAG 상담 실행")
-async def consult_plant_care(
+def consult_plant_care(
     request: PlantCareChatRequest,
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)
@@ -91,7 +91,7 @@ async def consult_plant_care(
         )
 
 @router.get("/sessions", response_model=List[ChatSession], summary="상담 세션 목록 조회")
-async def list_chat_sessions(
+def list_chat_sessions(
     plantId: uuid.UUID | None = Query(None, description="특정 식물의 상담 세션만 조회"),
     responseMode: str | None = Query(None, pattern="^(expert|companion)$", description="상담 모드별 세션 필터"),
     current_user_id: uuid.UUID = Depends(get_current_user),
@@ -121,7 +121,7 @@ async def list_chat_sessions(
         )
 
 @router.get("/sessions/{sessionId}/messages", response_model=List[ChatMessage], summary="세션별 대화 메시지 이력 조회")
-async def list_chat_messages(
+def list_chat_messages(
     sessionId: uuid.UUID = Path(..., description="세션 UUID"),
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)

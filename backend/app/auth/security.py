@@ -4,7 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from app.db.session import supabase, reusable_oauth2
 
 
-async def get_current_user(
+def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(reusable_oauth2)
 ) -> uuid.UUID:
     """

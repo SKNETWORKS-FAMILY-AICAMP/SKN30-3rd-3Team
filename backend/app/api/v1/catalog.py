@@ -9,7 +9,7 @@ def clean_search_term(value: str) -> str:
     return value.strip().replace("%", "").replace(",", " ").replace("(", " ").replace(")", " ")
 
 @router.get("", response_model=List[PlantCatalogItem], status_code=status.HTTP_200_OK, summary="식물 품종 도감 조회 및 검색")
-async def list_or_search_catalog(
+def list_or_search_catalog(
     q: Optional[str] = Query(None, description="품종 국문명 또는 학명(영문명) 검색어"),
     limit: int = Query(10, ge=1, le=50, description="자동완성 결과 최대 개수")
 ):

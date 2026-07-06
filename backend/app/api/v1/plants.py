@@ -11,7 +11,7 @@ from supabase import Client
 router = APIRouter(prefix="/plants", tags=["Plants"])
 
 @router.get("", response_model=List[Plant], summary="사용자의 식물 목록 조회")
-async def list_plants(
+def list_plants(
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)
 ):
@@ -40,7 +40,7 @@ async def list_plants(
         )
 
 @router.post("", response_model=Plant, status_code=status.HTTP_201_CREATED, summary="식물 프로필 신규 등록")
-async def create_plant(
+def create_plant(
     plant_in: PlantCreate,
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)
@@ -81,7 +81,7 @@ async def create_plant(
         )
 
 @router.post("/{plantId}/care-logs", response_model=CareLog, status_code=status.HTTP_201_CREATED, summary="식물 재배/물주기 로그 등록")
-async def create_care_log(
+def create_care_log(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     log_in: CareLogCreate = ...,
     current_user_id: uuid.UUID = Depends(get_current_user),
@@ -133,7 +133,7 @@ async def create_care_log(
         )
 
 @router.post("/{plantId}/photos", response_model=PlantPhoto, status_code=status.HTTP_201_CREATED, summary="식물 사진 메타데이터 등록")
-async def create_plant_photo(
+def create_plant_photo(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     photo_in: PlantPhotoCreate = ...,
     current_user_id: uuid.UUID = Depends(get_current_user),
@@ -183,7 +183,7 @@ async def create_plant_photo(
         )
 
 @router.get("/{plantId}", response_model=PlantDetail, summary="식물 상세 프로필 조회")
-async def get_plant_detail(
+def get_plant_detail(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)
@@ -246,7 +246,7 @@ async def get_plant_detail(
         )
 
 @router.delete("/{plantId}", status_code=status.HTTP_204_NO_CONTENT, summary="식물 프로필 삭제")
-async def delete_plant(
+def delete_plant(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)
@@ -273,7 +273,7 @@ async def delete_plant(
         )
 
 @router.patch("/{plantId}", response_model=Plant, summary="식물 프로필 수정")
-async def update_plant(
+def update_plant(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     plant_in: PlantUpdate = ...,
     current_user_id: uuid.UUID = Depends(get_current_user),
@@ -324,7 +324,7 @@ async def update_plant(
         )
 
 @router.put("/{plantId}/care-logs/{logId}", response_model=CareLog, summary="재배 로그 수정")
-async def update_care_log(
+def update_care_log(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     logId: uuid.UUID = Path(..., description="로그 UUID"),
     log_in: CareLogUpdate = ...,
@@ -379,7 +379,7 @@ async def update_care_log(
         )
 
 @router.delete("/{plantId}/care-logs/{logId}", status_code=status.HTTP_204_NO_CONTENT, summary="재배 로그 삭제")
-async def delete_care_log(
+def delete_care_log(
     plantId: uuid.UUID = Path(..., description="식물 UUID"),
     logId: uuid.UUID = Path(..., description="로그 UUID"),
     current_user_id: uuid.UUID = Depends(get_current_user),

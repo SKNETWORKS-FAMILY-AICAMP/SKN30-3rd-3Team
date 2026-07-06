@@ -26,7 +26,7 @@ def _excerpt(text: str, max_len: int = 180) -> str:
 
 
 @router.get("/search", response_model=List[RagSearchResult], status_code=status.HTTP_200_OK, summary="공식 RAG 문서 검색")
-async def search_rag_documents(
+def search_rag_documents(
     q: str = Query(..., min_length=1, description="검색할 식물 관리/증상 키워드"),
     limit: int = Query(5, ge=1, le=10, description="검색 결과 최대 개수"),
 ):

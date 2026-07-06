@@ -421,37 +421,51 @@ def grade_or_rerank(state: AgentState) -> Dict[str, Any]:
         return {"retrieved_docs": docs[:4]}
         
     try:
+        import json as _json
         from openai import OpenAI
-        client = OpenAI(api_key=openai_key, timeout=12.0, max_retries=0)
-        
+        client = OpenAI(api_key=openai_key, timeout=20.0, max_retries=0)
+
+        # 후보 문서 전체를 한 프롬프트에 담아 1회 호출로 배치 채점한다.
+        # (문서당 개별 호출 대비 지연/비용을 문서 수만큼 절감)
+        doc_blocks = []
+        for idx, doc in enumerate(docs):
+            title = (doc.get("metadata") or {}).get("title") or "제목 없음"
+            content = str(doc.get("content") or "")[:1200]
+            doc_blocks.append(f"[문서 {idx}]\n제목: {title}\n내용: {content}")
+
+        res = client.chat.completions.create(
+            model=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
+            temperature=0.0,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "당신은 RAG 시스템의 문서 관련성 평가기입니다. 사용자의 질문에 답하기 위해 각 문서가 유용한지 판별합니다. "
+                        "사용자가 특정 식물/작물에 대해 묻는 경우, 문서가 같은 식물/작물이거나 질문에 직접 도움이 되는 일반 관리 원칙을 담을 때만 관련 있다고 판단하세요. "
+                        "문서가 다른 식물/작물 전용이고 현재 질문과 무관하면 반드시 제외하세요. "
+                        "관련 있는 문서의 인덱스만 배열로 담아 JSON 형식 {\"relevant\": [0, 2]} 로만 응답하세요. "
+                        "관련 문서가 하나도 없으면 {\"relevant\": []} 를 반환하세요."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"식물/작물: {plant_label}\n질문: {question}\n\n{chr(10).join(doc_blocks)}"
+                }
+            ]
+        )
+        raw = str(res.choices[0].message.content or "").strip()
+        parsed = _json.loads(raw)
+        relevant_indices = parsed.get("relevant") or []
+
         filtered_docs = []
-        for doc in docs:
-            res = client.chat.completions.create(
-                model=os.getenv("CHAT_MODEL") or settings.CHAT_MODEL,
-                temperature=0.0,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "당신은 RAG 시스템의 문서 관련성 평가기입니다. 사용자의 질문에 답하기 위해 주어진 문서가 유용한지 판별합니다. "
-                            "사용자가 특정 식물/작물에 대해 묻는 경우, 문서가 같은 식물/작물이거나 질문에 직접 도움이 되는 일반 관리 원칙을 담을 때만 'yes'를 출력하세요. "
-                            "문서가 다른 식물/작물 전용이고 현재 질문과 무관하면 무조건 'no'를 출력하세요. "
-                            "결과는 오직 'yes' 또는 'no'만 출력하세요."
-                        )
-                    },
-                    {"role": "user", "content": f"식물/작물: {plant_label}\n질문: {question}\n\n문서 제목: {(doc.get('metadata') or {}).get('title')}\n문서 내용: {doc.get('content')}"}
-                ]
-            )
-            score = str(res.choices[0].message.content or "").strip().lower()
-            if 'yes' in score:
-                filtered_docs.append(doc)
+        for idx in relevant_indices:
+            if isinstance(idx, int) and 0 <= idx < len(docs):
+                filtered_docs.append(docs[idx])
                 if len(filtered_docs) >= 4:
                     break
-                    
-        # 필터링 후에도 문서가 없으면(모두 no인 경우) 원본 상위 2개라도 살림
-        if not filtered_docs:
-            filtered_docs = []
-            
+
+        # 모두 무관 판정이면 빈 리스트 유지 — 무관 문서를 억지로 주입하지 않는다 (환각 방지)
         return {"retrieved_docs": filtered_docs}
     except Exception as e:
         logger.warning("Reranking failed: %s", e)

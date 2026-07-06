@@ -2,6 +2,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from supabase import Client
 
 from app.auth.security import get_current_user
@@ -13,7 +14,7 @@ from app.schemas.upload import UploadSignedUrlRequest, UploadSignedUrlResponse
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
 @router.post("/signed-url", response_model=UploadSignedUrlResponse, status_code=status.HTTP_200_OK, summary="사진 업로드용 signed URL 발급")
-async def create_signed_upload_url(
+def create_signed_upload_url(
     request: UploadSignedUrlRequest,
     current_user_id: uuid.UUID = Depends(get_current_user),
     db: Client = Depends(get_supabase_client)
@@ -63,7 +64,9 @@ async def upload_plant_photo(
     업로드 전 식물 소유권을 검증하고, Storage 저장 후 plant_photos 메타데이터를 등록합니다.
     """
     try:
-        plant_check = db.table("plants").select("id").eq("id", str(plantId)).eq("user_id", str(current_user_id)).execute()
+        plant_check = await run_in_threadpool(
+            lambda: db.table("plants").select("id").eq("id", str(plantId)).eq("user_id", str(current_user_id)).execute()
+        )
         if not plant_check.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -81,13 +84,15 @@ async def upload_plant_photo(
             )
 
         service_db = get_supabase_service_client()
-        service_db.storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(
-            storage_path,
-            content,
-            file_options={
-                "content-type": file.content_type or "application/octet-stream",
-                "upsert": "false"
-            }
+        await run_in_threadpool(
+            lambda: service_db.storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(
+                storage_path,
+                content,
+                file_options={
+                    "content-type": file.content_type or "application/octet-stream",
+                    "upsert": "false"
+                }
+            )
         )
 
         captured_at = datetime.now(timezone.utc)
@@ -100,7 +105,9 @@ async def upload_plant_photo(
             "note": note,
             "captured_at": captured_at.isoformat()
         }
-        response = db.table("plant_photos").insert(insert_data).execute()
+        response = await run_in_threadpool(
+            lambda: db.table("plant_photos").insert(insert_data).execute()
+        )
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -11,6 +11,11 @@ backend_dir = Path(__file__).resolve().parents[4]
 docs_json_path = backend_dir / "data" / "processed" / "gardening_docs.json"
 SUPABASE_KEYWORD_SCAN_LIMIT = 3000
 
+# Two-Stage Retrieval: 1단계(벡터 검색)는 임계값을 완화해 후보를 폭넓게 수집(Recall)하고,
+# 2단계(grade_or_rerank)에서 LLM이 엄격하게 정제(Precision)한다.
+VECTOR_MATCH_THRESHOLD = 0.25
+VECTOR_CANDIDATE_COUNT = 80
+
 class SearchResult:
     def __init__(self, content: str, metadata: Dict[str, Any], score: float):
         self.content = content
@@ -310,8 +315,8 @@ def search_documents(query: str, top_k: int = 8) -> List[SearchResult]:
                 "match_rag_chunks",
                 {
                     "query_embedding": query_vector,
-                    "match_threshold": 0.32,
-                    "match_count": top_k
+                    "match_threshold": VECTOR_MATCH_THRESHOLD,
+                    "match_count": VECTOR_CANDIDATE_COUNT
                 }
             ).execute()
             
