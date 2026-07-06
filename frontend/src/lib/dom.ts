@@ -83,3 +83,42 @@ export function findPlantGrid(doc: Document) {
   }) as HTMLElement | undefined;
 }
 
+
+export function showTextInputModal(
+  doc: Document,
+  options: { title: string; description: string; placeholder: string; submitLabel: string },
+  onSubmit: (value: string) => void
+) {
+  doc.querySelector("[data-app-modal]")?.remove();
+  const overlay = doc.createElement("div");
+  overlay.dataset.appModal = "true";
+  overlay.className = "fixed inset-0 z-[999] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4";
+  overlay.innerHTML = `<div class="w-full max-w-md bg-surface-container-lowest rounded-2xl shadow-2xl border border-outline-variant/20 p-6 space-y-5">
+    <div>
+      <p class="text-label-sm font-bold text-primary uppercase tracking-wide">Farm하니 기록</p>
+      <h3 class="text-headline-md font-bold text-on-surface mt-1">${escapeHtml(options.title)}</h3>
+      <p class="text-body-md text-on-surface-variant mt-2">${escapeHtml(options.description)}</p>
+    </div>
+    <textarea class="w-full min-h-32 rounded-xl bg-surface-container border border-outline-variant/20 focus:ring-2 focus:ring-primary p-4 text-body-md resize-none" placeholder="${escapeHtml(options.placeholder)}"></textarea>
+    <div class="flex justify-end gap-2">
+      <button class="px-4 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container" data-modal-cancel="true">취소</button>
+      <button class="px-5 py-2 rounded-lg bg-primary text-white font-bold shadow-sm" data-modal-submit="true">${escapeHtml(options.submitLabel)}</button>
+    </div>
+  </div>`;
+  doc.body.appendChild(overlay);
+  const textarea = overlay.querySelector("textarea") as HTMLTextAreaElement | null;
+  textarea?.focus();
+  overlay.querySelector("[data-modal-cancel]")?.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+  overlay.querySelector("[data-modal-submit]")?.addEventListener("click", () => {
+    const value = textarea?.value.trim() || "";
+    if (!value) {
+      textarea?.focus();
+      return;
+    }
+    overlay.remove();
+    onSubmit(value);
+  });
+}
