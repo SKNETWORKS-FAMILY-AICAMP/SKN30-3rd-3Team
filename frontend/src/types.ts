@@ -77,6 +77,16 @@ export type ChatProgressEvent = {
   label: string;
 };
 
+export type ChecklistTask = {
+  id: string;
+  plantId: string;
+  plantName: string;
+  taskType: "water" | "observe" | "photo";
+  title: string;
+  description: string;
+  done: boolean;
+};
+
 export type WateringReminder = {
   plantId: string;
   name: string;
