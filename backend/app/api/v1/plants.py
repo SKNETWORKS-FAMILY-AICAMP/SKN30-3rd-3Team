@@ -43,8 +43,26 @@ def list_plants(
             detail="식물 목록 조회 중 오류가 발생했습니다."
         )
 
-# 종별 기본 물주기 간격이 정해지기 전까지 사용하는 공통 권장 간격
+# 종 그룹별 권장 물주기 간격 (일). 이름/품종 문자열 키워드 매칭 — 먼저 매칭되는 규칙 우선.
 DEFAULT_WATERING_INTERVAL_DAYS = 7
+WATERING_INTERVAL_RULES: list[tuple[int, tuple[str, ...]]] = [
+    # 다육·선인장류: 건조에 강함
+    (14, ("선인장", "다육", "스투키", "산세베리아", "산세비에리아", "금전수", "알로에",
+          "틸란드시아", "리톱스", "세덤", "에케베리아", "cactus", "sansevieria",
+          "dracaena", "zamioculcas", "aloe", "succulent")),
+    # 허브·채소류: 물 소모가 빠름
+    (3, ("바질", "민트", "고수", "루꼴라", "상추", "깻잎", "시금치", "부추",
+         "토마토", "방울토마토", "오이", "고추", "파프리카", "딸기", "가지",
+         "basil", "mint", "lettuce", "tomato", "cucumber", "strawberry")),
+]
+
+
+def watering_interval_days(name: str | None, species: str | None) -> int:
+    haystack = f"{name or ''} {species or ''}".lower()
+    for days, keywords in WATERING_INTERVAL_RULES:
+        if any(keyword in haystack for keyword in keywords):
+            return days
+    return DEFAULT_WATERING_INTERVAL_DAYS
 
 # 주의: 이 라우트는 GET /plants/{plantId} 보다 먼저 선언되어야 한다 (경로 매칭 우선순위)
 @router.get("/reminders", response_model=List[WateringReminder], summary="물주기 리마인더 조회")
@@ -80,13 +98,14 @@ def list_watering_reminders(
         today = datetime.now(timezone.utc).date()
         reminders = []
         for item in plants:
+            interval = watering_interval_days(item.get("name"), item.get("species"))
             watered_raw = last_watered.get(item["id"])
             days_since = None
             reminder_status = "unknown"
             if watered_raw:
                 watered_date = date.fromisoformat(str(watered_raw)[:10])
                 days_since = (today - watered_date).days
-                remaining = DEFAULT_WATERING_INTERVAL_DAYS - days_since
+                remaining = interval - days_since
                 if remaining <= 0:
                     reminder_status = "due"
                 elif remaining <= 1:
@@ -99,7 +118,7 @@ def list_watering_reminders(
                 species=item.get("species"),
                 lastWateredAt=str(watered_raw)[:10] if watered_raw else None,
                 daysSinceWatered=days_since,
-                intervalDays=DEFAULT_WATERING_INTERVAL_DAYS,
+                intervalDays=interval,
                 status=reminder_status
             ))
         # 물이 급한 순서로 정렬 (due → upcoming → unknown → ok)

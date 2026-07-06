@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_STORAGE_BUCKET: str = "plant-photos"
 
+    # JWT 로컬 검증 설정
+    # SUPABASE_JWT_SECRET: 레거시(HS256) 프로젝트에서만 필요. 비워두면 JWKS 공개키 검증 사용.
+    SUPABASE_JWT_SECRET: str = ""
+    JWT_AUDIENCE: str = "authenticated"
+
     # OpenAI & LLM 설정
     OPENAI_API_KEY: str = ""
     CHAT_MODEL: str = "gpt-4o-mini"

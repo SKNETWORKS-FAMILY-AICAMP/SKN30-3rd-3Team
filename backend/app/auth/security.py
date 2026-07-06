@@ -1,7 +1,70 @@
+import logging
 import uuid
+
+import jwt
+from jwt import PyJWKClient
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
+
+from app.core.config import settings
 from app.db.session import supabase, reusable_oauth2
+
+logger = logging.getLogger(__name__)
+
+_INVALID_TOKEN_ERROR = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="만료되거나 올바르지 않은 토큰입니다."
+)
+
+# JWKS 공개키는 프로세스 수명 동안 캐시된다 (PyJWKClient 내부 캐시 + lifespan)
+_jwk_client: PyJWKClient | None = None
+
+
+def _get_jwk_client() -> PyJWKClient:
+    global _jwk_client
+    if _jwk_client is None:
+        jwks_url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        _jwk_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
+    return _jwk_client
+
+
+def _verify_token_locally(token: str) -> uuid.UUID | None:
+    """
+    Supabase JWT를 네트워크 왕복 없이 로컬에서 검증한다.
+
+    반환 None = 로컬 검증을 수행할 수 없는 환경(키 없음/미지원 알고리즘)으로,
+    호출자는 Supabase Auth API 폴백을 사용해야 한다.
+    서명 불일치/만료/audience 불일치는 jwt.InvalidTokenError로 전파된다.
+    """
+    header = jwt.get_unverified_header(token)
+    alg = str(header.get("alg") or "")
+
+    if alg.startswith("HS"):
+        # 레거시 프로젝트: 공유 시크릿(HS256) 서명 — SUPABASE_JWT_SECRET 필요
+        if not settings.SUPABASE_JWT_SECRET:
+            return None
+        payload = jwt.decode(
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=[alg],
+            audience=settings.JWT_AUDIENCE,
+        )
+    elif alg in {"RS256", "RS512", "ES256", "ES512", "EdDSA"}:
+        # 신규 프로젝트: JWKS 공개키(비대칭) 서명
+        signing_key = _get_jwk_client().get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=[alg],
+            audience=settings.JWT_AUDIENCE,
+        )
+    else:
+        return None
+
+    sub = payload.get("sub")
+    if not sub:
+        raise jwt.InvalidTokenError("missing sub claim")
+    return uuid.UUID(sub)
 
 
 def get_current_user(
@@ -9,31 +72,29 @@ def get_current_user(
 ) -> uuid.UUID:
     """
     FastAPI 전용 인증 Dependency입니다.
-    
-    1. HTTP 요청 헤더에서 JWT(Access Token)를 안전하게 파싱합니다.
-    2. Supabase Auth의 get_user(token) API를 사용해 토큰의 진위와 만료 여부를 판별합니다.
-    3. 검증에 통과하면 사용자의 고유 UUID 식별자를 반환합니다.
-    4. 토큰이 비어 있거나 만료/위조되었다면 즉시 401 Unauthorized 에러를 발생시킵니다.
+
+    1순위: JWT 서명을 로컬에서 검증한다 (요청당 Supabase 왕복 제거).
+    2순위: 로컬 검증이 불가능한 환경에서만 Supabase Auth API(get_user)로 폴백한다.
     """
     token = credentials.credentials
+
     try:
-        # Supabase API 서버를 통해 토큰을 검증하고 유저 데이터를 가져옵니다.
+        user_id = _verify_token_locally(token)
+        if user_id is not None:
+            return user_id
+    except jwt.InvalidTokenError:
+        # 서명 위조/만료/audience 불일치 — 폴백 없이 즉시 거부
+        raise _INVALID_TOKEN_ERROR
+    except Exception as exc:
+        # JWKS 조회 실패 등 인프라성 오류 — 네트워크 검증으로 폴백
+        logger.warning("로컬 JWT 검증 불가, Supabase Auth 폴백 사용: %s", exc)
+
+    try:
         auth_response = supabase.auth.get_user(token)
-        
         if not auth_response or not auth_response.user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="인증 정보를 확인할 수 없습니다. 유효하지 않은 응답입니다."
-            )
-        
-        # 데이터베이스 스키마(UUID 형식)와 맞추기 위해 UUID 객체로 변환하여 넘겨줍니다.
+            raise _INVALID_TOKEN_ERROR
         return uuid.UUID(auth_response.user.id)
-        
     except HTTPException:
         raise
     except Exception:
-        # 내부 예외 문자열을 클라이언트에 노출하지 않는다 (스키마/엔드포인트 정보 유출 방지)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="만료되거나 올바르지 않은 토큰입니다."
-        )
+        raise _INVALID_TOKEN_ERROR

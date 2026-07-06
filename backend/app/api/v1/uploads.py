@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
+MAX_PHOTO_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
 @router.post("/signed-url", response_model=UploadSignedUrlResponse, status_code=status.HTTP_200_OK, summary="사진 업로드용 signed URL 발급")
 def create_signed_upload_url(
     request: UploadSignedUrlRequest,
@@ -26,10 +30,15 @@ def create_signed_upload_url(
     Supabase Storage 사진 업로드용 signed URL을 발급합니다.
     격리된 사용자 경로: users/{user_id}/plants/{uuid}_{filename}
     """
+    _, ext = os.path.splitext(request.fileName)
+    if ext.lower() not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="지원하지 않는 이미지 형식입니다. (jpg, jpeg, png, webp, gif만 허용)"
+        )
     try:
-        # 파일 확장자 및 고유 파일명 생성
-        _, ext = os.path.splitext(request.fileName)
-        unique_filename = f"{uuid.uuid4()}{ext}"
+        # 고유 파일명 생성
+        unique_filename = f"{uuid.uuid4()}{ext.lower()}"
         storage_path = f"users/{current_user_id}/plants/{unique_filename}"
         
         # Supabase Storage Signed Upload URL 발급
@@ -77,14 +86,26 @@ async def upload_plant_photo(
                 detail="식물을 찾을 수 없거나 해당 식물에 대한 권한이 없습니다."
             )
 
+        if file.content_type and file.content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="지원하지 않는 이미지 형식입니다. (jpeg, png, webp, gif만 허용)"
+            )
+
         _, ext = os.path.splitext(file.filename or "")
-        safe_ext = ext if ext.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif"} else ".jpg"
+        safe_ext = ext if ext.lower() in ALLOWED_IMAGE_EXTENSIONS else ".jpg"
         storage_path = f"users/{current_user_id}/plants/{plantId}/{uuid.uuid4()}{safe_ext}"
-        content = await file.read()
+        # 크기 제한을 초과하는 업로드는 메모리 고갈 방지를 위해 초과 시점에 즉시 중단한다
+        content = await file.read(MAX_PHOTO_UPLOAD_BYTES + 1)
         if not content:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="업로드할 사진 파일이 비어 있습니다."
+            )
+        if len(content) > MAX_PHOTO_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="사진 파일이 너무 큽니다. 8MB 이하로 업로드해주세요."
             )
 
         service_db = get_supabase_service_client()
