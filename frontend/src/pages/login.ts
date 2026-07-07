@@ -26,7 +26,10 @@ export function createLoginPage(ctx: AppContext) {
         </div>
         <button type="button" class="px-3 py-2 rounded-full bg-growth-light text-primary text-label-sm font-bold" data-profile-photo-pick>사진 선택</button>
       </div>
-      <p class="text-label-sm text-outline" data-profile-photo-label>선택된 사진 없음</p>`;
+      <div class="flex items-center gap-3">
+        <img alt="프로필 사진 미리보기" class="hidden w-12 h-12 rounded-full object-cover border border-outline-variant/30" data-profile-photo-thumb>
+        <p class="text-label-sm text-outline" data-profile-photo-label>선택된 사진 없음</p>
+      </div>`;
     const authFormHost = submit.parentElement;
     authFormHost?.insertBefore(profileUpload, submit);
     const profileInput = createHiddenFileInput(doc);
@@ -38,6 +41,15 @@ export function createLoginPage(ctx: AppContext) {
       selectedProfilePhoto = profileInput.files?.[0] ?? null;
       const label = profileUpload.querySelector("[data-profile-photo-label]");
       if (label) label.textContent = selectedProfilePhoto ? selectedProfilePhoto.name : "선택된 사진 없음";
+      const thumb = profileUpload.querySelector("[data-profile-photo-thumb]") as HTMLImageElement | null;
+      if (thumb && selectedProfilePhoto) {
+        void fileToResizedDataUrl(selectedProfilePhoto).then((previewUrl) => {
+          thumb.src = previewUrl;
+          thumb.classList.remove("hidden");
+        });
+      } else if (thumb) {
+        thumb.classList.add("hidden");
+      }
     });
 
     if (toggle) {

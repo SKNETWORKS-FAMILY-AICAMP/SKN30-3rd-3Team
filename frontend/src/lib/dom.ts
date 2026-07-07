@@ -137,9 +137,12 @@ export function showFormModal(
       ${
         options.photoField
           ? `<div class="flex items-center justify-between gap-4 rounded-xl bg-surface-container border border-outline-variant/20 p-3">
-        <div class="min-w-0">
-          <span class="text-label-sm font-bold text-on-surface-variant">${escapeHtml(options.photoField.label)}</span>
-          <p class="text-label-sm text-outline truncate" data-form-photo-label>${escapeHtml(options.photoField.description ?? "선택된 사진 없음")}</p>
+        <div class="flex items-center gap-3 min-w-0">
+          <img alt="선택한 사진 미리보기" class="hidden w-12 h-12 rounded-xl object-cover border border-outline-variant/30 flex-shrink-0" data-form-photo-thumb>
+          <div class="min-w-0">
+            <span class="text-label-sm font-bold text-on-surface-variant">${escapeHtml(options.photoField.label)}</span>
+            <p class="text-label-sm text-outline truncate" data-form-photo-label>${escapeHtml(options.photoField.description ?? "선택된 사진 없음")}</p>
+          </div>
         </div>
         <button type="button" class="shrink-0 px-3 py-2 rounded-full bg-growth-light text-primary text-label-sm font-bold hover:brightness-95 transition-all" data-form-photo-pick>사진 선택</button>
       </div>`
@@ -164,6 +167,15 @@ export function showFormModal(
       selectedPhoto = photoInput.files?.[0] ?? null;
       const label = overlay.querySelector("[data-form-photo-label]");
       if (label) label.textContent = selectedPhoto ? selectedPhoto.name : options.photoField?.description ?? "선택된 사진 없음";
+      const thumb = overlay.querySelector("[data-form-photo-thumb]") as HTMLImageElement | null;
+      if (thumb && selectedPhoto) {
+        void fileToResizedDataUrl(selectedPhoto).then((previewUrl) => {
+          thumb.src = previewUrl;
+          thumb.classList.remove("hidden");
+        });
+      } else if (thumb) {
+        thumb.classList.add("hidden");
+      }
     });
   }
 

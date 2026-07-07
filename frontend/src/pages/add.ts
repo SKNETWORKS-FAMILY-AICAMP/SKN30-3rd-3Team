@@ -7,7 +7,7 @@ import {
   uploadPlantPhoto
 } from "../api";
 import type { PlantCatalogItem } from "../types";
-import { createHiddenFileInput, escapeHtml, frameAlert, normalizedText } from "../lib/dom";
+import { createHiddenFileInput, escapeHtml, fileToResizedDataUrl, frameAlert, normalizedText } from "../lib/dom";
 import { daysAgoDateInput, todayDateInput } from "../lib/format";
 import { setSelectedPlantId } from "../lib/storage";
 import type { AppContext } from "./context";
@@ -110,12 +110,32 @@ export function createAddPage(ctx: AppContext) {
 
     const input = createHiddenFileInput(doc);
     dropzone.addEventListener("click", () => input.click());
-    input.addEventListener("change", () => {
+    input.addEventListener("change", async () => {
       profilePhotoRef.current = input.files?.[0] ?? null;
+      const file = profilePhotoRef.current;
+      if (!file) return;
+
       const label = dropzone.querySelector("p.font-label-md");
-      if (label && profilePhotoRef.current) {
-        label.textContent = profilePhotoRef.current.name;
+      if (label) label.textContent = file.name;
+
+      // 선택한 사진 미리보기 — 아이콘 원 자리를 대체
+      let preview = dropzone.querySelector("[data-add-photo-preview]") as HTMLImageElement | null;
+      if (!preview) {
+        preview = doc.createElement("img");
+        preview.dataset.addPhotoPreview = "true";
+        preview.alt = "선택한 식물 사진 미리보기";
+        preview.className = "w-32 h-32 rounded-2xl object-cover border border-outline-variant/30 shadow-sm mb-4";
+        const iconCircle = dropzone.querySelector(".rounded-full") as HTMLElement | null;
+        if (iconCircle) {
+          iconCircle.classList.add("hidden");
+          iconCircle.before(preview);
+        } else {
+          dropzone.insertBefore(preview, dropzone.firstChild);
+        }
       }
+      preview.src = await fileToResizedDataUrl(file, 512);
+      const hint = dropzone.querySelector("p.text-xs");
+      if (hint) hint.textContent = "다시 클릭하면 다른 사진으로 바꿀 수 있어요.";
     });
   }
 

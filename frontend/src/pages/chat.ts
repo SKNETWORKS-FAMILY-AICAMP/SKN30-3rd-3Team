@@ -16,7 +16,7 @@ import {
   REFERENCE_PANE_COMPACT_KEY,
   REFERENCE_PANE_HIDDEN_KEY
 } from "../lib/constants";
-import { createHiddenFileInput, escapeHtml, frameAlert, normalizedText } from "../lib/dom";
+import { createHiddenFileInput, escapeHtml, fileToResizedDataUrl, frameAlert, normalizedText } from "../lib/dom";
 import { formatDate } from "../lib/format";
 import {
   appendLocalChatMemory,
@@ -44,7 +44,12 @@ export function createChatPage(ctx: AppContext) {
     const messages = doc.getElementById("chat-messages");
     if (!messages) return;
 
-    const preview = file ? `<p class="mt-2 text-label-sm opacity-80">첨부 사진: ${escapeHtml(file.name)}</p>` : "";
+    const preview = file
+      ? `<div class="mt-2 space-y-1">
+          <img alt="첨부 사진 미리보기" class="hidden w-32 h-32 rounded-xl object-cover border border-white/40" data-user-attachment-thumb>
+          <p class="text-label-sm opacity-80">첨부 사진: ${escapeHtml(file.name)}</p>
+        </div>`
+      : "";
     messages.insertAdjacentHTML(
       "beforeend",
       `<div class="flex flex-col items-end gap-2 animate-fade-in">
@@ -55,6 +60,16 @@ export function createChatPage(ctx: AppContext) {
         <span class="text-label-sm text-outline">방금</span>
       </div>`
     );
+    if (file) {
+      const thumb = messages.lastElementChild?.querySelector("[data-user-attachment-thumb]") as HTMLImageElement | null;
+      if (thumb) {
+        void fileToResizedDataUrl(file, 512).then((previewUrl) => {
+          thumb.src = previewUrl;
+          thumb.classList.remove("hidden");
+          messages.scrollTop = messages.scrollHeight;
+        });
+      }
+    }
     messages.scrollTop = messages.scrollHeight;
   }
 
@@ -67,11 +82,20 @@ export function createChatPage(ctx: AppContext) {
     const badge = doc.createElement("div");
     badge.dataset.chatAttachment = "true";
     badge.className =
-      "absolute left-3 -top-10 right-3 bg-growth-light text-primary rounded-xl px-3 py-2 text-label-sm font-bold flex items-center justify-between shadow-sm border border-primary/10";
-    badge.innerHTML = `<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">image</span>${escapeHtml(
-      file.name
-    )}</span><button type="button" class="text-on-surface-variant hover:text-primary" data-clear-attachment="true">×</button>`;
+      "absolute left-3 -top-16 right-3 bg-growth-light text-primary rounded-xl px-3 py-2 text-label-sm font-bold flex items-center justify-between shadow-sm border border-primary/10";
+    badge.innerHTML = `<span class="flex items-center gap-2.5 min-w-0">
+      <span class="material-symbols-outlined text-[16px]" data-attachment-icon>image</span>
+      <img alt="첨부 사진 미리보기" class="hidden w-10 h-10 rounded-lg object-cover border border-primary/20 bg-white flex-shrink-0" data-attachment-thumb>
+      <span class="truncate">${escapeHtml(file.name)}</span>
+    </span><button type="button" class="text-on-surface-variant hover:text-primary flex-shrink-0 ml-2" data-clear-attachment="true">×</button>`;
     inputBar.appendChild(badge);
+    void fileToResizedDataUrl(file).then((previewUrl) => {
+      const thumb = badge.querySelector("[data-attachment-thumb]") as HTMLImageElement | null;
+      if (!thumb) return;
+      thumb.src = previewUrl;
+      thumb.classList.remove("hidden");
+      badge.querySelector("[data-attachment-icon]")?.remove();
+    });
     badge.querySelector("[data-clear-attachment]")?.addEventListener("click", (event) => {
       event.preventDefault();
       pendingChatPhotoRef.current = null;
